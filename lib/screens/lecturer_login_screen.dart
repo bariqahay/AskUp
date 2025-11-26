@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dashboard_screen.dart';
+import 'forgot_password_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LecturerLoginScreen extends StatefulWidget {
-  const LecturerLoginScreen({Key? key}) : super(key: key);
+  const LecturerLoginScreen({super.key});
 
   @override
   State<LecturerLoginScreen> createState() => _LecturerLoginScreenState();
@@ -217,12 +218,20 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                           ],
                         ),
                         TextButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ForgotPasswordScreen(),
+                              ),
+                            );
+                          },
                           child: const Text(
                             'Forgot Password?',
                             style: TextStyle(
-                                color: Color(0xFF5B9BD5),
-                                fontWeight: FontWeight.w500),
+                              color: Color(0xFF5B9BD5),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],

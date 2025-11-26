@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uni_links/uni_links.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'deep_link_handler.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/lecturer_login_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/new_password_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
     url: 'https://ynptioatjdujbcblwcwu.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucHRpb2F0amR1amJjYmx3Y3d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MjEyMjMsImV4cCI6MjA3OTE5NzIyM30.7b2HJHudbrKyfM3phCjRxOV4ItSB9UcGmXlsZ7Ry_14', // ganti sama anon key lu
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucHRpb2F0amR1amJjYmx3Y3d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MjEyMjMsImV4cCI6MjA3OTE5NzIyM30.7b2HJHudbrKyfM3phCjRxOV4ItSB9UcGmXlsZ7Ry_14',
   );
 
-  runApp(const AskUpApp());
+  runApp(
+    DeepLinkHandler(
+      child: const AskUpApp(),
+    ),
+  );
 }
 
 class AskUpApp extends StatelessWidget {
-  const AskUpApp({Key? key}) : super(key: key);
+  const AskUpApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -30,9 +37,9 @@ class AskUpApp extends StatelessWidget {
   }
 }
 
-// Screen ini untuk cek session / auto-login
+// Screen cek session untuk auto-login
 class InitialScreen extends StatefulWidget {
-  const InitialScreen({Key? key}) : super(key: key);
+  const InitialScreen({super.key});
 
   @override
   State<InitialScreen> createState() => _InitialScreenState();
@@ -44,7 +51,21 @@ class _InitialScreenState extends State<InitialScreen> {
   @override
   void initState() {
     super.initState();
+    _handleStartupDeepLink();
     _checkSession();
+  }
+
+  // Handle kalau app dibuka langsung dari email link (cold start)
+  Future<void> _handleStartupDeepLink() async {
+    final initialLink = await getInitialLink();
+    if (initialLink != null && initialLink.contains('reset-password')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const NewPasswordScreen(),
+        ),
+      );
+    }
   }
 
   void _checkSession() async {
@@ -52,8 +73,7 @@ class _InitialScreenState extends State<InitialScreen> {
 
     final session = supabase.auth.currentSession;
 
-    if (session != null && session.user != null) {
-      // Ambil dari SharedPreferences
+    if (session != null) {
       final prefs = await SharedPreferences.getInstance();
       final lecturerId = prefs.getString('lecturer_id');
       final lecturerName = prefs.getString('lecturer_name');
@@ -77,7 +97,6 @@ class _InitialScreenState extends State<InitialScreen> {
       MaterialPageRoute(builder: (_) => const WelcomeScreen()),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
