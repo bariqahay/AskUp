@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/role_card.dart';
 import 'lecturer_login_screen.dart';
+import 'student_login_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({Key? key}) : super(key: key);
@@ -84,7 +85,12 @@ class WelcomeScreen extends StatelessWidget {
                   title: 'STUDENT',
                   subtitle: 'Join Classes',
                   description: 'Ask questions, participate in polls, and check-in',
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const StudentLoginScreen()),
+                    );
+                  },
                 ),
                 const SizedBox(height: 60),
                 Text(
