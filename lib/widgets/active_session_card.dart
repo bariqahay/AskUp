@@ -71,7 +71,7 @@ class ActiveSessionCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
-              value: currentStudents / totalStudents,
+              value: totalStudents == 0 ? 0 : currentStudents / totalStudents,
               minHeight: 8,
               valueColor: AlwaysStoppedAnimation(
                 progressColors.isNotEmpty ? progressColors.first : Colors.blue,

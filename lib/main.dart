@@ -1,11 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uni_links/uni_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'deep_link_handler.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/dashboard_screen.dart';
-import 'screens/lecturer_login_screen.dart';
 import 'screens/new_password_screen.dart';
 
 void main() async {
@@ -13,14 +14,11 @@ void main() async {
 
   await Supabase.initialize(
     url: 'https://ynptioatjdujbcblwcwu.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucHRpb2F0amR1amJjYmx3Y3d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MjEyMjMsImV4cCI6MjA3OTE5NzIyM30.7b2HJHudbrKyfM3phCjRxOV4ItSB9UcGmXlsZ7Ry_14',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucHRpb2F0amR1amJjYmx3Y3d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2MjEyMjMsImV4cCI6MjA3OTE5NzIyM30.7b2HJHudbrKyfM3phCjRxOV4ItSB9UcGmXlsZ7Ry_14',
   );
 
-  runApp(
-    DeepLinkHandler(
-      child: const AskUpApp(),
-    ),
-  );
+  runApp(DeepLinkHandler(child: const AskUpApp()));
 }
 
 class AskUpApp extends StatelessWidget {
@@ -37,7 +35,6 @@ class AskUpApp extends StatelessWidget {
   }
 }
 
-// Screen cek session untuk auto-login
 class InitialScreen extends StatefulWidget {
   const InitialScreen({super.key});
 
@@ -55,19 +52,40 @@ class _InitialScreenState extends State<InitialScreen> {
     _checkSession();
   }
 
-  // Handle kalau app dibuka langsung dari email link (cold start)
+  // FIXED: Deep link cold-start handler
   Future<void> _handleStartupDeepLink() async {
-    final initialLink = await getInitialLink();
-    if (initialLink != null && initialLink.contains('reset-password')) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const NewPasswordScreen(),
-        ),
-      );
+    // --- WEB ---
+    if (kIsWeb) {
+      final uri = Uri.base;
+
+      if (uri.path.contains('reset-password')) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const NewPasswordScreen()),
+        );
+      }
+
+      return;
+    }
+
+    // --- MOBILE ---
+    try {
+      final initialLink = await getInitialLink();
+
+      if (initialLink != null && initialLink.contains('reset-password')) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const NewPasswordScreen()),
+        );
+      }
+    } catch (e) {
+      debugPrint("Deep link error: $e");
     }
   }
 
+  // FIXED: Auto-login + safe navigation
   void _checkSession() async {
     await Future.delayed(const Duration(milliseconds: 300));
 
@@ -78,7 +96,7 @@ class _InitialScreenState extends State<InitialScreen> {
       final lecturerId = prefs.getString('lecturer_id');
       final lecturerName = prefs.getString('lecturer_name');
 
-      if (lecturerId != null && lecturerName != null) {
+      if (lecturerId != null && lecturerName != null && mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -92,16 +110,16 @@ class _InitialScreenState extends State<InitialScreen> {
       }
     }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-    );
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

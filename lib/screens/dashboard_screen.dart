@@ -51,17 +51,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .neq('status', 'active');
 
       // Convert ke List<Map>
-      final activeList =
-          List<Map<String, dynamic>>.from(active as List<dynamic>);
-      final historyList =
-          List<Map<String, dynamic>>.from(history as List<dynamic>);
+      final activeList = List<Map<String, dynamic>>.from(
+        active as List<dynamic>,
+      );
+      final historyList = List<Map<String, dynamic>>.from(
+        history as List<dynamic>,
+      );
 
       // Inject total_students
       for (var s in activeList) {
-        s['total_students'] = await _getStudentCount(s['id']);
+        s['total_students'] = await _getStudentCount(s['id'].toString());
       }
       for (var s in historyList) {
-        s['total_students'] = await _getStudentCount(s['id']);
+        s['total_students'] = await _getStudentCount(s['id'].toString());
       }
 
       setState(() {
@@ -75,7 +77,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<int> _getStudentCount(int sessionId) async {
+  Future<int> _getStudentCount(String sessionId) async {
     try {
       final res = await supabase
           .from('questions')
@@ -218,9 +220,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const ProfileScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
               );
             },
             child: Container(
