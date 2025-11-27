@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -13,31 +14,51 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
   bool isLoading = false;
 
   Future<void> _updatePassword() async {
-    if (newPasswordController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password cannot be empty')),
-      );
+    final newPass = newPasswordController.text.trim();
+
+    if (newPass.isEmpty) {
+      _show('Password cannot be empty');
+      return;
+    }
+
+    if (newPass.length < 6) {
+      _show('Password must be at least 6 characters');
       return;
     }
 
     setState(() => isLoading = true);
+
     try {
-      await Supabase.instance.client.auth.updateUser(
-        UserAttributes(password: newPasswordController.text.trim()),
+      final res = await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: newPass),
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password updated successfully!')),
-      );
+      if (!mounted) return;
 
-      Navigator.pop(context);
+      if (res.user != null) {
+        _show('Password updated successfully!');
+        Navigator.pop(context);
+        return;
+      }
+
+      _show('Failed to update password');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      if (mounted) _show('Error: $e');
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  void _show(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
+
+  @override
+  void dispose() {
+    newPasswordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -47,12 +68,15 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
               'Enter your new password',
-              style: TextStyle(fontSize: 16),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
+
             const SizedBox(height: 16),
+
             TextField(
               controller: newPasswordController,
               obscureText: true,
@@ -66,12 +90,21 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: isLoading ? null : _updatePassword,
-              child: isLoading
-                  ? const CircularProgressIndicator()
-                  : const Text('Confirm Password'),
+
+            const SizedBox(height: 28),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: isLoading ? null : _updatePassword,
+                child: isLoading
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Confirm Password'),
+              ),
             ),
           ],
         ),

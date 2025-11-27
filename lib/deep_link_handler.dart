@@ -1,63 +1,43 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:uni_links/uni_links.dart';
-import 'dart:async';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/new_password_screen.dart';
+import 'dart:async';
 
 class DeepLinkHandler extends StatefulWidget {
   final Widget child;
-  const DeepLinkHandler({required this.child, super.key});
+  const DeepLinkHandler({super.key, required this.child});
 
   @override
   State<DeepLinkHandler> createState() => _DeepLinkHandlerState();
 }
 
 class _DeepLinkHandlerState extends State<DeepLinkHandler> {
-  StreamSubscription? _sub;
-  bool _handledThisLink = false;
+  late final StreamSubscription _authSub;
 
   @override
   void initState() {
     super.initState();
-    _handleIncomingLinks();
-  }
 
-  void _handleIncomingLinks() {
-    // --- WEB: uni_links tidak bekerja, jadi langsung return ---
-    if (kIsWeb) return;
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
 
-    // --- MOBILE: aman pakai uni_links ---
-    _sub = linkStream.listen(
-      (String? link) {
-        if (link == null) return;
-        if (!mounted) return;
-
-        // Hindari navigasi berulang
-        if (_handledThisLink) return;
-
-        if (link.contains('reset-password')) {
-          _handledThisLink = true;
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const NewPasswordScreen()),
-          );
-        }
-      },
-      onError: (err) {
-        // optional log
-        debugPrint("Deep link error: $err");
-      },
-    );
+      if (event == AuthChangeEvent.passwordRecovery) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const NewPasswordScreen()),
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _authSub.cancel();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    return widget.child;
+  }
 }

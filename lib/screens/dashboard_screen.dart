@@ -220,7 +220,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+                MaterialPageRoute(
+                  builder: (context) => ProfileScreen(
+                    lecturerData: {
+                      'id': widget.lecturerId,
+                      'name': widget.lecturerName,
+                      // lo bisa tambahin default/fetch data lain kalau mau
+                      'email': 'lecturer@example.com',
+                      'role': 'lecturer',
+                      'department': 'CS',
+                      'employee_id': 'L123',
+                      'avatar_url': '',
+                      'push_notifications': true,
+                      'email_updates': true,
+                      'created_at': DateTime.now().toIso8601String(),
+                    },
+                  ),
+                ),
               );
             },
             child: Container(
