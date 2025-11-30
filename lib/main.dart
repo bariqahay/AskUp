@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'deep_link_handler.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/lecturer_login_screen.dart';   // <- penting
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,14 @@ class AskUpApp extends StatelessWidget {
     return MaterialApp(
       title: 'AskUp+',
       debugShowCheckedModeBanner: false,
+
+      // 🔥 daftar semua named routes
+      routes: {
+        '/welcome': (context) => const WelcomeScreen(),
+        '/login': (context) => const LecturerLoginScreen(),
+      },
+
+      // 🔥 start dari InitialScreen
       home: const InitialScreen(),
     );
   }
@@ -60,8 +69,10 @@ class _InitialScreenState extends State<InitialScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) =>
-                DashboardScreen(lecturerId: lecturerId, lecturerName: lecturerName),
+            builder: (_) => DashboardScreen(
+              lecturerId: lecturerId,
+              lecturerName: lecturerName,
+            ),
           ),
         );
         return;
@@ -69,10 +80,7 @@ class _InitialScreenState extends State<InitialScreen> {
     }
 
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-      );
+      Navigator.pushReplacementNamed(context, '/welcome');
     }
   }
 

@@ -1,3 +1,4 @@
+// profile_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -43,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ===== Fetch profile info from users table =====
   Future<void> _fetchProfile() async {
+    if (!mounted) return;
     setState(() => isLoading = true);
     try {
       final userId = widget.lecturerData['id'];
@@ -67,13 +69,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       debugPrint('Error fetching profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load profile: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
   // ===== Load stats from RPC =====
   Future<void> _loadStats() async {
+    if (!mounted) return;
     setState(() => isLoading = true);
     try {
       final response = await supabase.rpc(
@@ -83,7 +91,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (response != null) {
         setState(() {
-          // COUNT() di function sudah di-cast ke BIGINT atau INT
           sessionsCreated = (response['sessions_created'] ?? 0).toInt();
           sessionsReached = (response['sessions_reached'] ?? 0).toInt();
           averageRating = (response['avg_rating'] ?? 0).toDouble();
@@ -92,12 +99,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       debugPrint('Error loading stats: $e');
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
   // ===== Update preferences =====
   Future<void> updatePreference(String field, bool value) async {
+    if (!mounted) return;
     setState(() => isLoading = true);
     try {
       await supabase.from('users').update({field: value}).eq('id', widget.lecturerData['id']);
@@ -114,7 +122,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SnackBar(content: Text('Failed to update $field'), backgroundColor: Colors.red),
       );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -130,7 +138,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (pickedFile == null) return;
 
+      if (!mounted) return;
       setState(() => isLoading = true);
+
       final File imageFile = File(pickedFile.path);
       final String userId = widget.lecturerData['id'];
       final String fileName = 'avatar_$userId.${pickedFile.path.split('.').last}';
@@ -145,9 +155,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final String publicUrl = supabase.storage.from('avatars').getPublicUrl(filePath);
       await supabase.from('users').update({'avatar_url': publicUrl}).eq('id', userId);
 
-      setState(() => avatarUrl = publicUrl);
-
       if (mounted) {
+        setState(() => avatarUrl = publicUrl);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Avatar updated successfully'), backgroundColor: Colors.green),
         );
@@ -160,11 +169,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  // ===== Edit profile modal =====
+  // ===== Edit profile modal (existing) =====
   void _showEditProfileModal() {
     final nameController = TextEditingController(text: name);
     final emailController = TextEditingController(text: email);
@@ -240,11 +249,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
                               onPressed: () async {
+                                if (!mounted) return;
                                 setState(() => isLoading = true);
                                 try {
                                   await supabase.from('users').update({
-                                    'name': nameController.text,
-                                    'email': emailController.text,
+                                    'name': nameController.text.trim(),
+                                    'email': emailController.text.trim(),
                                   }).eq('id', widget.lecturerData['id']);
                                   await _fetchProfile();
                                   Navigator.pop(context);
@@ -252,11 +262,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     const SnackBar(content: Text('Profile updated'), backgroundColor: Colors.green),
                                   );
                                 } catch (e) {
+                                  debugPrint('Edit profile failed: $e');
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('Failed to update profile'), backgroundColor: Colors.red),
                                   );
                                 } finally {
-                                  setState(() => isLoading = false);
+                                  if (mounted) setState(() => isLoading = false);
                                 }
                               },
                               child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
@@ -275,6 +286,173 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // ===== New: Change Password modal & logic (direct DB update) =====
+  void _showChangePasswordModal() {
+    final passwordController = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Change Password', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'New Password'),
+              ),
+              const SizedBox(height: 16),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () async {
+                    final newPass = passwordController.text.trim();
+                    if (newPass.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password cannot be empty'), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
+
+                    // Directly update users.password (NOT recommended for production)
+                    Navigator.pop(context);
+                    if (!mounted) return;
+                    setState(() => isLoading = true);
+                    try {
+                      await supabase.from('users').update({'password': newPass}).eq('id', widget.lecturerData['id']);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Password updated'), backgroundColor: Colors.green),
+                      );
+                    } catch (e) {
+                      debugPrint('Change password failed: $e');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to change password: $e'), backgroundColor: Colors.red),
+                      );
+                    } finally {
+                      if (mounted) setState(() => isLoading = false);
+                    }
+                  },
+                  child: const Text('Change'),
+                ),
+              ])
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  // ===== New: Update Email modal & logic (direct DB update) =====
+  void _showUpdateEmailModal() {
+    final emailController = TextEditingController(text: email);
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Update Email', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'New Email'),
+              ),
+              const SizedBox(height: 16),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () async {
+                    final newEmail = emailController.text.trim();
+                    if (newEmail.isEmpty || !newEmail.contains('@')) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Enter a valid email'), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
+
+                    Navigator.pop(context);
+                    if (!mounted) return;
+                    setState(() => isLoading = true);
+                    try {
+                      await supabase.from('users').update({'email': newEmail}).eq('id', widget.lecturerData['id']);
+                      setState(() => email = newEmail);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Email updated'), backgroundColor: Colors.green),
+                      );
+                    } catch (e) {
+                      debugPrint('Update email failed: $e');
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to update email: $e'), backgroundColor: Colors.red),
+                      );
+                    } finally {
+                      if (mounted) setState(() => isLoading = false);
+                    }
+                  },
+                  child: const Text('Update'),
+                ),
+              ])
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  // ===== New: About AskUp modal =====
+  void _showAboutModal() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('About AskUp', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              const Text('AskUp is a lightweight classroom interaction tool built for lectures.'),
+              const SizedBox(height: 8),
+              const Text('Version: 0.1 (College project)'),
+              const SizedBox(height: 12),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+              ]),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  // ===== Logout logic =====
+  Future<void> _handleLogout() async {
+    if (!mounted) return;
+    setState(() => isLoading = true);
+    try {
+      // sign out supabase auth session if any
+      await supabase.auth.signOut();
+    } catch (e) {
+      debugPrint('SignOut error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    }
+  }
+
+  // ===== UI =====
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -307,7 +485,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 24),
               _buildPreferencesSection(),
               const SizedBox(height: 24),
-              _buildAccountActions(),
+              _buildAccountActions(), // buttons wired to modals
             ],
           ),
           if (isLoading)
@@ -346,10 +524,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: avatarUrl.isEmpty
                   ? Center(
-                      child: Text(
-                        name.isNotEmpty ? name[0] : 'U',
-                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
+                      child: Text(name.isNotEmpty ? name[0] : 'U',
+                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                     )
                   : null,
             ),
@@ -473,20 +649,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         const Text('Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
-        AccountButton(icon: Icons.lock_outline, text: 'Change Password', iconColor: Colors.blue, onTap: () {}),
+        AccountButton(icon: Icons.lock_outline, text: 'Change Password', iconColor: Colors.blue, onTap: _showChangePasswordModal),
         const SizedBox(height: 12),
-        AccountButton(icon: Icons.email_outlined, text: 'Update Email', iconColor: Colors.blue, onTap: () {}),
+        AccountButton(icon: Icons.email_outlined, text: 'Update Email', iconColor: Colors.blue, onTap: _showUpdateEmailModal),
         const SizedBox(height: 12),
-        AccountButton(icon: Icons.info_outline, text: 'About AskUp', iconColor: Colors.blue, onTap: () {}),
+        AccountButton(icon: Icons.info_outline, text: 'About AskUp', iconColor: Colors.blue, onTap: _showAboutModal),
         const SizedBox(height: 12),
         AccountButton(
           icon: Icons.logout,
           text: 'Log Out',
           iconColor: Colors.red,
           isLogout: true,
-          onTap: () {
-            Navigator.of(context).pushReplacementNamed('/login');
-          },
+          onTap: _handleLogout,
         ),
       ],
     );
