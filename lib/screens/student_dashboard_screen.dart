@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'student_session_detail_screen.dart';
+import 'student_profile_screen.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
@@ -76,20 +78,30 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     ),
                   ],
                 ),
-                Container(
-                  width: 45,
-                  height: 45,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5A623),
-                    borderRadius: BorderRadius.circular(22.5),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'JD',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const StudentProfileScreen(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 45,
+                    height: 45,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5A623),
+                      borderRadius: BorderRadius.circular(22.5),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'JD',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -363,7 +375,18 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     required Color statusColor,
   }) {
     return GestureDetector(
-      onTap: () {},
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => StudentSessionDetailScreen(
+              title: title,
+              lecturer: lecturer,
+              code: code,
+            ),
+          ),
+        );
+      },
 
       child: Container(
         padding: const EdgeInsets.all(16),
