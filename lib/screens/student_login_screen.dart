@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'student_dashboard_screen.dart';
 
 class StudentLoginScreen extends StatefulWidget {
@@ -11,30 +13,123 @@ class StudentLoginScreen extends StatefulWidget {
 class _StudentLoginScreenState extends State<StudentLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _passwordFocus = FocusNode();
+
   bool _isPasswordVisible = false;
   bool _rememberMe = false;
+  bool isLoading = false;
+
+  final supabase = Supabase.instance.client;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberMe();
+  }
+
+  Future<void> _loadRememberMe() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('saved_student_email');
+    final savedPassword = prefs.getString('saved_student_password');
+
+    if (savedEmail != null && savedPassword != null) {
+      setState(() {
+        _emailController.text = savedEmail;
+        _passwordController.text = savedPassword;
+        _rememberMe = true;
+      });
+    }
+  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
-  void _login() {
-    if (_emailController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showSnack("Email & Password cannot be empty");
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final response = await supabase.rpc(
+        'login_student',
+        params: {
+          'email_in': email,
+          'password_in': password,
+        },
+      );
+
+      final userData = response;
+
+      if (userData == null) {
+        _showSnack("Server returned no response");
+        return;
+      }
+
+      if (userData is Map && userData['error'] != null) {
+        final err = userData['error'];
+
+        if (err == 'email_not_found') {
+          _showSnack("Email not registered");
+        } else if (err == 'invalid_password') {
+          _showSnack("Invalid password");
+        } else {
+          _showSnack("Login error: $err");
+        }
+        return;
+      }
+
+      String studentId = userData['id']?.toString() ?? '';
+      String studentName = userData['name']?.toString()
+          ?? userData['full_name']?.toString()
+          ?? "Student";
+
+      final prefs = await SharedPreferences.getInstance();
+
+      if (_rememberMe) {
+        await prefs.setString('saved_student_email', email);
+        await prefs.setString('saved_student_password', password);
+      } else {
+        await prefs.remove('saved_student_email');
+        await prefs.remove('saved_student_password');
+      }
+
+      await prefs.setString('student_id', studentId);
+      await prefs.setString('student_name', studentName);
+
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const StudentDashboardScreen()),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter email and password'),
-          backgroundColor: Colors.red,
+        MaterialPageRoute(
+          builder: (_) => StudentDashboardScreen(
+            studentId: studentId,
+            studentName: studentName,
+          ),
         ),
       );
+    } catch (e) {
+      _showSnack("Unexpected error: $e");
+    } finally {
+      setState(() => isLoading = false);
     }
+  }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 
   @override
@@ -91,75 +186,57 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                     'Sign in to join classes and participate',
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.grey[600],
+                      color: Colors.grey,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ),
                 const SizedBox(height: 40),
-                const Text(
-                  'Email',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D2D2D),
-                  ),
-                ),
+
+                const Text('Email',
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  onSubmitted: (_) => _passwordFocus.requestFocus(),
                   decoration: InputDecoration(
                     hintText: 'Enter your student email',
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFF5A623)),
+                    prefixIcon:
+                        const Icon(Icons.email_outlined, color: Color(0xFFF5A623)),
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: Colors.grey[300]!),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFF5A623), width: 2),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
                   ),
                 ),
+
                 const SizedBox(height: 20),
-                const Text(
-                  'Password',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D2D2D),
-                  ),
-                ),
+
+                const Text('Password',
+                    style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
+                  focusNode: _passwordFocus,
+                  onSubmitted: (_) => _login(),
                   decoration: InputDecoration(
                     hintText: 'Enter your password',
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFF5A623)),
+                    prefixIcon:
+                        const Icon(Icons.lock_outline, color: Color(0xFFF5A623)),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                        color: Colors.grey[400],
+                        _isPasswordVisible
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: Colors.grey,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
+                      onPressed: () =>
+                          setState(() => _isPasswordVisible = !_isPasswordVisible),
                     ),
                     filled: true,
                     fillColor: Colors.white,
@@ -167,78 +244,34 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: Colors.grey[300]!),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFF5A623), width: 2),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _rememberMe,
-                            onChanged: (value) {
-                              setState(() {
-                                _rememberMe = value ?? false;
-                              });
-                            },
-                            activeColor: const Color(0xFFF5A623),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
+                        Checkbox(
+                          value: _rememberMe,
+                          onChanged: (value) =>
+                              setState(() => _rememberMe = value ?? false),
                         ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Remember me',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF2D2D2D),
-                          ),
-                        ),
+                        const Text('Remember me'),
                       ],
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Forgot password feature will be implemented'),
-                            backgroundColor: Colors.blue,
-                          ),
-                        );
-                      },
-                      child: const Text(
-                        'Forgot Password?',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFFF5A623),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 32),
+
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _login,
+                    onPressed: isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFF5A623),
                       shape: RoundedRectangleBorder(
@@ -246,31 +279,34 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Sign In',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
+
                 const SizedBox(height: 40),
+
                 Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Text(
-                      "By signing in, you agree to the University's Terms of Service",
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        height: 1.4,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+                  child: Text(
+                    "By signing in, you agree to the University's Terms of Service",
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    textAlign: TextAlign.center,
                   ),
                 ),
+
                 const SizedBox(height: 20),
               ],
             ),
