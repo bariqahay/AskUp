@@ -45,20 +45,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .eq('classes.lecturer_id', widget.lecturerId)
           .eq('status', 'active');
 
-      final history = await supabase
-          .from('sessions')
-          .select(
-            'id, title, start_time, end_time, status, class_id, session_code, '
-            'classes!inner(title, code, lecturer_id)',
-          )
-          .eq('classes.lecturer_id', widget.lecturerId)
-          .neq('status', 'active');
+        final history = await supabase
+            .from('sessions')
+            .select(
+              'id, title, start_time, end_time, status, class_id, session_code, '
+              'classes!inner(title, code, lecturer_id), '
+              'session_summaries(title, content)' // ⬅️ tambah ini
+            )
+            .eq('classes.lecturer_id', widget.lecturerId)
+            .neq('status', 'active')
+            .order('start_time', ascending: false); // ⬅️ optional: urutkan terbaru dulu
 
       final activeList =
           (active ?? <dynamic>[]).map((e) => Map<String, dynamic>.from(e as Map)).toList();
       final historyList =
           (history ?? <dynamic>[]).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-
+      
       // Get all session IDs
       final allSessionIds = [
         ...activeList.map((s) => s['id'].toString()),
@@ -138,6 +140,136 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  void _showAddSummaryModal({
+    required String sessionId,
+    required String sessionTitle,
+  }) async { // ⬅️ tambah async
+    final titleController = TextEditingController(text: sessionTitle);
+    final contentController = TextEditingController();
+    bool isSaving = false;
+
+    // ⬅️ Load existing summary kalau ada
+    try {
+      final existing = await supabase
+          .from('session_summaries')
+          .select('title, content')
+          .eq('session_id', sessionId)
+          .eq('user_id', widget.lecturerId)
+          .maybeSingle();
+
+      if (existing != null) {
+        titleController.text = existing['title'] ?? sessionTitle;
+        contentController.text = existing['content'] ?? '';
+      }
+    } catch (e) {
+      debugPrint('Error loading summary: $e');
+    }
+
+    if (!mounted) return; // ⬅️ safety check
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Session Summary',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: contentController,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      labelText: 'Summary',
+                      hintText: 'What did you cover in this session?',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              setModalState(() => isSaving = true);
+                              try {
+                                // ⬅️ Pakai upsert supaya bisa insert atau update
+                                await supabase.from('session_summaries').upsert(
+                                  {
+                                    'session_id': sessionId,
+                                    'user_id': widget.lecturerId,
+                                    'title': titleController.text.trim(),
+                                    'content': contentController.text.trim(),
+                                  },
+                                  onConflict: 'session_id,user_id', // ⬅️ unique constraint
+                                );
+
+                                if (context.mounted) {
+                                  Navigator.pop(context, true); // ⬅️ return true
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Summary saved'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setModalState(() => isSaving = false);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Error: $e')),
+                                  );
+                                }
+                              }
+                            },
+                      child: isSaving
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('SAVE SUMMARY'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((saved) {
+      // ⬅️ Refresh data setelah modal ditutup
+      if (saved == true) {
+        _loadSessions();
+      }
+    });
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -247,10 +379,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       final s = sessionHistory[index];
                                       return Padding(
                                         padding: const EdgeInsets.only(bottom: 8),
-                                        child: SessionHistoryItem(
-                                          title: s['title'] ?? 'Untitled',
-                                          time: _formatTime(s['start_time']),
-                                          students: '${s['total_students'] ?? 0} students',
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(12),
+                                          onTap: () {
+                                            _showAddSummaryModal(
+                                              sessionId: s['id'].toString(),
+                                              sessionTitle: s['title'] ?? 'Session Summary',
+                                            );
+                                          },
+                                            child: SessionHistoryItem(
+                                              title: s['title'] ?? 'Untitled',
+                                              time: _formatTime(s['start_time']),
+                                              students: '${s['total_students'] ?? 0} students',
+                                              // ⬅️ Check apakah ada summary
+                                              hasSummary: s['session_summaries'] != null && 
+                                                          s['session_summaries'] is List &&
+                                                          (s['session_summaries'] as List).isNotEmpty,
+                                              // ⬅️ Ambil content dari summary
+                                              summaryPreview: s['session_summaries'] != null && 
+                                                              s['session_summaries'] is List &&
+                                                              (s['session_summaries'] as List).isNotEmpty
+                                                  ? ((s['session_summaries'] as List).first['content'] as String?)
+                                                  : null,
+                                            ),
                                         ),
                                       );
                                     },

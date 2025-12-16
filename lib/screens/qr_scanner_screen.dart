@@ -5,10 +5,12 @@ import 'student_session_detail_screen.dart';
 
 class QRScannerScreen extends StatefulWidget {
   final String studentId;
+  final String studentName; // Add this parameter
 
   const QRScannerScreen({
     super.key,
     required this.studentId,
+    required this.studentName, // Add this parameter
   });
 
   @override
@@ -76,6 +78,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
               code: sessionData['classes']['code'],
               sessionId: sessionId,
               studentId: widget.studentId,
+              studentName: widget.studentName, // Pass the student name
             ),
           ),
         );

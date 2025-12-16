@@ -20,8 +20,8 @@ class SessionDetailScreen extends StatefulWidget {
     required this.title,
     required this.classCode,
     required this.totalStudents,
-    required this.lecturerId,   // ⬅️ tambah
-    required this.lecturerName, // ⬅️ tambah
+    required this.lecturerId,
+    required this.lecturerName,
   });
 
   @override
@@ -189,7 +189,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     if (confirm != true) return;
 
     await supabase.from('sessions').update({
-      'status': 'ended',
+      'status': 'completed',
       'end_time': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', widget.sessionId);
 
@@ -214,14 +214,17 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     required String value,
     required String label,
     required Color iconColor,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
   }) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cardColor,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [
+          boxShadow: isDark ? [] : [
             BoxShadow(
               color: Colors.grey.withOpacity(0.1),
               spreadRadius: 1,
@@ -236,10 +239,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
             const SizedBox(height: 8),
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: textColor,
               ),
             ),
             const SizedBox(height: 4),
@@ -247,7 +250,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
               ),
             ),
           ],
@@ -262,16 +265,18 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    required bool isDark,
+    required Color cardColor,
   }) {
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cardColor,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.3), width: 2),
-          boxShadow: [
+          boxShadow: isDark ? [] : [
             BoxShadow(
               color: Colors.grey.withOpacity(0.1),
               spreadRadius: 1,
@@ -300,7 +305,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   subtitle,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey[600],
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
                   ),
                 ),
               ],
@@ -313,27 +318,34 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Theme variables untuk dark mode support
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        foregroundColor: textColor,
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               widget.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
+                color: textColor,
               ),
             ),
             Text(
               'Code: ${widget.classCode}',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
                 fontWeight: FontWeight.normal,
               ),
             ),
@@ -351,9 +363,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardColor,
                       borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
+                      boxShadow: isDark ? [] : [
                         BoxShadow(
                           color: Colors.grey.withOpacity(0.1),
                           spreadRadius: 1,
@@ -364,17 +376,26 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Text(
+                        Text(
                           'Student Check-in',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
+                            color: textColor,
                           ),
                         ),
                         const SizedBox(height: 16),
-                        QrImageView(
-                          data: 'askup://session/${widget.sessionId}',
-                          size: 150,
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: QrImageView(
+                            data: 'askup://session/${widget.sessionId}',
+                            size: 150,
+                            backgroundColor: Colors.white,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -392,7 +413,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
                           ),
                         ),
                       ],
@@ -409,6 +430,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         value: '$presentCount/${widget.totalStudents}',
                         label: 'Present',
                         iconColor: Colors.blue,
+                        isDark: isDark,
+                        cardColor: cardColor,
+                        textColor: textColor,
                       ),
                       const SizedBox(width: 12),
                       _statCard(
@@ -416,6 +440,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         value: '$newQuestionsCount',
                         label: 'New Questions',
                         iconColor: Colors.orange,
+                        isDark: isDark,
+                        cardColor: cardColor,
+                        textColor: textColor,
                       ),
                       const SizedBox(width: 12),
                       _statCard(
@@ -423,6 +450,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         value: '$activePollCount',
                         label: 'Active Poll',
                         iconColor: Colors.green,
+                        isDark: isDark,
+                        cardColor: cardColor,
+                        textColor: textColor,
                       ),
                     ],
                   ),
@@ -443,6 +473,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         ),
                       );
                     },
+                    isDark: isDark,
+                    cardColor: cardColor,
                   ),
 
                   const SizedBox(height: 12),
@@ -461,6 +493,8 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         ),
                       );
                     },
+                    isDark: isDark,
+                    cardColor: cardColor,
                   ),
 
                   const SizedBox(height: 20),
@@ -469,9 +503,9 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardColor,
                       borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
+                      boxShadow: isDark ? [] : [
                         BoxShadow(
                           color: Colors.grey.withOpacity(0.1),
                           spreadRadius: 1,
@@ -497,9 +531,10 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                               _sessionActive
                                   ? 'Session Active'
                                   : 'Session Ended',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
+                                color: textColor,
                               ),
                             ),
                           ],
@@ -511,7 +546,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                               : 'This session has ended. Students can no longer join.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
                           ),
                         ),
                         if (_sessionActive) ...[
@@ -520,7 +555,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                             alignment: Alignment.centerRight,
                             child: OutlinedButton(
                               onPressed: () async {
-                                await _endSession(); // update status di Supabase
+                                await _endSession();
 
                                 if (mounted) {
                                   Navigator.pushAndRemoveUntil(
@@ -531,7 +566,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                                         lecturerName: widget.lecturerName,
                                       ),
                                     ),
-                                    (route) => false, // clear semua halaman sebelumnya
+                                    (route) => false,
                                   );
                                 }
                               },
@@ -546,7 +581,6 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                             ),
                           ),
                         ],
-
                       ],
                     ),
                   ),

@@ -9,8 +9,6 @@ class StudentSessionDetailScreen extends StatefulWidget {
   final String title;
   final String lecturer;
   final String code;
-  final String? sessionId;
-  final String? studentId;
 
   const StudentSessionDetailScreen({
     super.key,
@@ -20,8 +18,6 @@ class StudentSessionDetailScreen extends StatefulWidget {
     required this.title,
     required this.lecturer,
     required this.code,
-    this.sessionId,
-    this.studentId,
   });
 
   @override
@@ -62,40 +58,33 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   Future<void> _loadData() async {
-    if (widget.sessionId == null) {
-      setState(() => _isLoading = false);
-      return;
-    }
-
     setState(() => _isLoading = true);
     try {
       // Load questions with upvotes
       final questions = await supabase
           .from('questions')
           .select('*, users!questions_student_id_fkey(name)')
-          .eq('session_id', widget.sessionId!)
+          .eq('session_id', widget.sessionId)
           .order('upvotes_count', ascending: false);
 
       // Load polls
       final polls = await supabase
           .from('polls')
           .select('*, poll_options(*)')
-          .eq('session_id', widget.sessionId!)
+          .eq('session_id', widget.sessionId)
           .order('created_at', ascending: false);
 
       // Check if student is checked in
-      if (widget.studentId != null) {
-        final checkIn = await supabase
-            .from('session_participants')
-            .select('joined_at')
-            .eq('session_id', widget.sessionId!)
-            .eq('student_id', widget.studentId!)
-            .maybeSingle();
+      final checkIn = await supabase
+          .from('session_participants')
+          .select('joined_at')
+          .eq('session_id', widget.sessionId)
+          .eq('student_id', widget.studentId)
+          .maybeSingle();
 
-        if (checkIn != null) {
-          _isCheckedIn = true;
-          _checkinTime = checkIn['joined_at'];
-        }
+      if (checkIn != null) {
+        _isCheckedIn = true;
+        _checkinTime = checkIn['joined_at'];
       }
 
       setState(() {
@@ -110,8 +99,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   void _setupRealtime() {
-    if (widget.sessionId == null) return;
-
     // Subscribe to questions changes
     _questionsChannel = supabase
         .channel('questions-${widget.sessionId}')
@@ -122,7 +109,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'session_id',
-            value: widget.sessionId!,
+            value: widget.sessionId,
           ),
           callback: (payload) {
             _loadData();
@@ -140,7 +127,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'session_id',
-            value: widget.sessionId!,
+            value: widget.sessionId,
           ),
           callback: (payload) {
             _loadData();
@@ -150,8 +137,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   Future<void> _toggleUpvote(String questionId, bool hasUpvoted) async {
-    if (widget.studentId == null) return;
-
     try {
       if (hasUpvoted) {
         // Remove upvote
@@ -159,14 +144,14 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             .from('question_upvotes')
             .delete()
             .eq('question_id', questionId)
-            .eq('student_id', widget.studentId!);
+            .eq('student_id', widget.studentId);
 
         await supabase.rpc('decrement_upvote', params: {'question_id': questionId});
       } else {
         // Add upvote
         await supabase.from('question_upvotes').insert({
           'question_id': questionId,
-          'student_id': widget.studentId!,
+          'student_id': widget.studentId,
         });
 
         await supabase.rpc('increment_upvote', params: {'question_id': questionId});
@@ -179,14 +164,12 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   Future<bool> _checkIfUpvoted(String questionId) async {
-    if (widget.studentId == null) return false;
-
     try {
       final upvote = await supabase
           .from('question_upvotes')
           .select('id')
           .eq('question_id', questionId)
-          .eq('student_id', widget.studentId!)
+          .eq('student_id', widget.studentId)
           .maybeSingle();
 
       return upvote != null;
@@ -195,17 +178,52 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     }
   }
 
-  void _showAskQuestionDialog() {
-    if (widget.sessionId == null || widget.studentId == null) {
+  Future<void> _submitQuestion() async {
+    if (_questionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Cannot ask question: session or student ID missing'),
+          content: Text('Please enter a question'),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
+    try {
+      await supabase.from('questions').insert({
+        'session_id': widget.sessionId,
+        'student_id': widget.studentId,
+        'content': _questionController.text.trim(),
+        'is_anonymous': _isAnonymous,
+        'upvotes_count': 0,
+        'status': 'pending',
+      });
+
+      if (mounted) {
+        Navigator.pop(context);
+        _questionController.clear();
+        setState(() => _isAnonymous = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Question sent successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showAskQuestionDialog() {
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -246,59 +264,65 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                     fontWeight: FontWeight.w500,
                     color: Color(0xFF2D2D2D),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        if (_questionController.text.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Please enter a question'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-
-                        try {
-                          await supabase.from('questions').insert({
-                            'session_id': widget.sessionId,
-                            'student_id': widget.studentId,
-                            'content': _questionController.text.trim(),
-                            'is_anonymous': _isAnonymous,
-                            'upvotes_count': 0,
-                            'status': 'pending',
-                          });
-
-                          Navigator.pop(context);
-                          _questionController.clear();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Question sent successfully!'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        } catch (e) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error: $e'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _questionController,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: 'Type your question here...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF5B9BD5)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _isAnonymous,
+                      onChanged: (value) {
+                        setDialogState(() => _isAnonymous = value ?? false);
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF5B9BD5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                      activeColor: const Color(0xFF5B9BD5),
+                    ),
+                    const Text(
+                      'Ask anonymously',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF2D2D2D),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF5B9BD5)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                         child: const Text(
                           'CANCEL',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF2D2D2D),
+                            color: Color(0xFF5B9BD5),
                           ),
                         ),
                       ),
@@ -442,10 +466,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   Widget _buildQATab() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     if (_questions.isEmpty) {
       return Center(
         child: Column(
@@ -549,11 +569,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                       ),
                     ),
                   ),
-                  Icon(
-                    Icons.more_vert,
-                    size: 18,
-                    color: Colors.grey[400],
-                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -601,57 +616,53 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
               ),
               const SizedBox(height: 12),
               // Upvote button
-              Row(
-                children: [
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => _toggleUpvote(questionId, hasUpvoted),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => _toggleUpvote(questionId, hasUpvoted),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: hasUpvoted
+                          ? const Color(0xFF5B9BD5).withValues(alpha: 0.1)
+                          : Colors.grey[100],
                       borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: hasUpvoted
-                              ? const Color(0xFF5B9BD5).withValues(alpha: 0.1)
-                              : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: hasUpvoted
-                                ? const Color(0xFF5B9BD5)
-                                : Colors.grey[300]!,
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              hasUpvoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
-                              size: 16,
-                              color: hasUpvoted
-                                  ? const Color(0xFF5B9BD5)
-                                  : Colors.grey[600],
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              upvotesCount.toString(),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: hasUpvoted
-                                    ? const Color(0xFF5B9BD5)
-                                    : Colors.grey[700],
-                              ),
-                            ),
-                          ],
-                        ),
+                      border: Border.all(
+                        color: hasUpvoted
+                            ? const Color(0xFF5B9BD5)
+                            : Colors.grey[300]!,
+                        width: 1,
                       ),
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          hasUpvoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
+                          size: 16,
+                          color: hasUpvoted
+                              ? const Color(0xFF5B9BD5)
+                              : Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          upvotesCount.toString(),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: hasUpvoted
+                                ? const Color(0xFF5B9BD5)
+                                : Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
               if (isAnswered && answer != null) ...[
                 const SizedBox(height: 12),
@@ -691,10 +702,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   Widget _buildPollsTab() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     if (_polls.isEmpty) {
       return Center(
         child: Column(
@@ -846,7 +853,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                   fontWeight: FontWeight.w600,
                   color: selectedOptionId != null ? Colors.white : Colors.grey[600],
                 ),
-              ],
+              ),
             ),
           ),
         ],
@@ -855,15 +862,13 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   Future<void> _submitVote(String pollId, String optionId) async {
-    if (widget.studentId == null) return;
-
     try {
       // Check if already voted
       final existingVote = await supabase
           .from('poll_votes')
           .select('id')
           .eq('poll_id', pollId)
-          .eq('student_id', widget.studentId!)
+          .eq('student_id', widget.studentId)
           .maybeSingle();
 
       if (existingVote != null) {
@@ -882,7 +887,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
       await supabase.from('poll_votes').insert({
         'poll_id': pollId,
         'option_id': optionId,
-        'student_id': widget.studentId!,
+        'student_id': widget.studentId,
       });
 
       // Increment votes count
@@ -1000,10 +1005,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   Widget _buildCheckInTab() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
     if (_isCheckedIn) {
       final checkinDateTime = _checkinTime != null
           ? DateTime.parse(_checkinTime!)

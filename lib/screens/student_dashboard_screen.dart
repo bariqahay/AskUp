@@ -31,6 +31,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     _loadDashboardData();
   }
 
+  @override
+  void dispose() {
+    _sessionCodeController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadDashboardData() async {
     if (widget.studentId == null) {
       setState(() => _isLoading = false);
@@ -84,7 +90,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           'class_title': session['classes']['title'],
           'class_code': session['classes']['code'],
           'new_questions': questions.length,
-          'has_active_poll': polls.length > 0,
+          'has_active_poll': polls.isNotEmpty,
         });
       }
 
@@ -123,27 +129,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
   }
 
-  List<Map<String, dynamic>> _activeSessions = [];
-  bool _isLoading = true;
-
-  // Stats
-  int _totalQuestions = 0;
-  int _totalPolls = 0;
-  double _attendanceRate = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadActiveSessions();
-    _loadStats();
-  }
-
-  @override
-  void dispose() {
-    _sessionCodeController.dispose();
-    super.dispose();
-  }
-
   void _joinSession() async {
     final code = _sessionCodeController.text.trim();
     if (code.isEmpty) {
@@ -168,7 +153,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
     try {
       // Query session by code
-      final session = await Supabase.instance.client
+      final session = await supabase
           .from('sessions')
           .select('id, title, session_code, status, classes!inner(title, code)')
           .eq('session_code', code)
@@ -188,9 +173,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       }
 
       // Check-in student
-      await Supabase.instance.client
-          .from('session_participants')
-          .insert({
+      await supabase.from('session_participants').insert({
         'session_id': session['id'],
         'student_id': widget.studentId,
       });
@@ -205,10 +188,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
               lecturer: session['classes']['title'],
               code: session['classes']['code'],
               sessionId: session['id'],
-              studentId: widget.studentId,
+              studentId: widget.studentId!,
+              studentName: _studentName,
             ),
           ),
-        );
+        ).then((_) => _loadDashboardData());
       }
     } catch (e) {
       if (mounted) {
@@ -238,14 +222,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => QRScannerScreen(studentId: widget.studentId!),
+        builder: (context) => QRScannerScreen(
+          studentId: widget.studentId!,
+          studentName: _studentName,
+        ),
       ),
-    );
-  }
-
-  void _showSnack(String msg, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
     );
   }
 
@@ -270,6 +251,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -320,10 +302,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       color: const Color(0xFFF5A623),
                       borderRadius: BorderRadius.circular(22.5),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
-                        'JD',
-                        style: TextStyle(
+                        _getInitials(_studentName),
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -337,6 +319,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
             const SizedBox(height: 24),
 
+            // Join Session Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -350,11 +333,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   ),
                 ],
               ),
-
-              const SizedBox(height: 24),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'JOIN SESSION',
@@ -365,17 +345,19 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       letterSpacing: 0.5,
                     ),
                   ),
-                  if (_activeSessions.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _sessionCodeController,
+                    decoration: InputDecoration(
+                      hintText: 'Enter session code',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF34C759),
-                        borderRadius: BorderRadius.circular(12),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.arrow_forward),
+                        onPressed: _joinSession,
                       ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -419,11 +401,14 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
+                  ),
                 ],
               ),
+            ),
 
-              const SizedBox(height: 12),
+            const SizedBox(height: 24),
 
+            // Active Sessions Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -459,7 +444,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
             const SizedBox(height: 12),
 
-            // Show loading or sessions list
+            // Active Sessions List
             _isLoading
                 ? const Center(
                     child: Padding(
@@ -504,16 +489,15 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: _buildActiveSessionCard(
+                              sessionId: session['id'],
                               title: session['title'],
                               lecturer: session['class_title'],
                               code: session['class_code'],
                               newQuestions: session['new_questions'],
                               hasActivePoll: session['has_active_poll'],
-                              statusColor: Colors.green,
                               isDark: isDark,
                               cardColor: cardColor,
                               textColor: textColor,
-                              sessionId: session['id'],
                             ),
                           );
                         }).toList(),
@@ -521,9 +505,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
             const SizedBox(height: 16),
 
+            // Stats Card
             GestureDetector(
               onTap: () {},
-
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -544,44 +528,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text(
-                          'Your Stats',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Column(
-                          children: _activeSessions.map((session) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _buildActiveSessionCard(
-                                sessionId: session['id'].toString(),
-                                title: session['title'] ?? 'Session',
-                                lecturer: session['classes']?['users']?['name'] ?? 'Lecturer',
-                                code: session['session_code'] ?? '-',
-                                newQuestions: session['new_questions'] ?? 0,
-                                hasActivePoll: session['has_active_poll'] ?? false,
-                              ),
-                            );
-                          }).toList(),
-                        ),
-
-              const SizedBox(height: 16),
-
-              GestureDetector(
-                onTap: () {},
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF5B9BD5), Color(0xFF4A8BC2)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                    const Text(
+                      'Your Stats',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -605,10 +558,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   ],
                 ),
               ),
+            ),
 
-              const SizedBox(height: 20),
-            ],
-          ),
+            const SizedBox(height: 20),
+          ],
         ),
       ),
     );
@@ -621,11 +574,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     required String code,
     required int newQuestions,
     required bool hasActivePoll,
-    required Color statusColor,
     required bool isDark,
     required Color cardColor,
     required Color textColor,
-    required String sessionId,
   }) {
     return GestureDetector(
       onTap: () {
@@ -634,13 +585,14 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           MaterialPageRoute(
             builder: (context) => StudentSessionDetailScreen(
               sessionId: sessionId,
-              studentId: widget.studentId,
+              studentId: widget.studentId!,
+              studentName: _studentName,
               title: title,
               lecturer: lecturer,
               code: code,
             ),
           ),
-        ).then((_) => _loadActiveSessions());
+        ).then((_) => _loadDashboardData());
       },
       child: Container(
         padding: const EdgeInsets.all(16),

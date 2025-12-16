@@ -4,71 +4,99 @@ class SessionHistoryItem extends StatelessWidget {
   final String title;
   final String time;
   final String students;
+  final bool hasSummary;
+  final String? summaryPreview;
 
   const SessionHistoryItem({
-    Key? key,
+    super.key,
     required this.title,
     required this.time,
     required this.students,
-  }) : super(key: key);
+    this.hasSummary = false,
+    this.summaryPreview,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final subtitleColor = isDark ? Colors.grey[400] : Colors.grey[600]; // ⬅️ adaptive color
+    
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+        ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title & Time
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                time,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ],
-          ),
-
-          // Students count
           Row(
             children: [
-              const Icon(Icons.person, size: 16, color: Colors.grey),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                ),
+              ),
+              if (hasSummary)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    '✓ Summary',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.green,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.access_time, size: 14, color: subtitleColor), // ⬅️ adaptive
+              const SizedBox(width: 4),
+              Text(
+                time,
+                style: TextStyle(fontSize: 12, color: subtitleColor), // ⬅️ adaptive
+              ),
+              const SizedBox(width: 16),
+              Icon(Icons.people_outline, size: 14, color: subtitleColor), // ⬅️ adaptive
               const SizedBox(width: 4),
               Text(
                 students,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: TextStyle(fontSize: 12, color: subtitleColor), // ⬅️ adaptive
               ),
             ],
           ),
+          if (hasSummary && summaryPreview != null && summaryPreview!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                summaryPreview!.length > 80 
+                    ? '${summaryPreview!.substring(0, 80)}...'
+                    : summaryPreview!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: subtitleColor, // ⬅️ adaptive
+                  fontStyle: FontStyle.italic,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
         ],
       ),
     );

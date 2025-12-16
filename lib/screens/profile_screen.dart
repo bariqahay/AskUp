@@ -448,11 +448,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
-        Navigator.of(context).pushReplacementNamed('/login');
+        // ⬅️ Ubah ke welcome screen instead of login
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/welcome', // atau '/welcome' sesuai route name kamu
+          (route) => false, // remove semua route sebelumnya
+        );
       }
     }
   }
-
   // ===== UI =====
   @override
   Widget build(BuildContext context) {
