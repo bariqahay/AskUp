@@ -3,6 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
 class StudentSessionDetailScreen extends StatefulWidget {
+  final String sessionId;
+  final String studentId;
+  final String studentName;
   final String title;
   final String lecturer;
   final String code;
@@ -11,6 +14,9 @@ class StudentSessionDetailScreen extends StatefulWidget {
 
   const StudentSessionDetailScreen({
     super.key,
+    required this.sessionId,
+    required this.studentId,
+    required this.studentName,
     required this.title,
     required this.lecturer,
     required this.code,
@@ -202,190 +208,43 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
 
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Ask a Question',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2D2D2D),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.pop(context),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Your Question',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF2D2D2D),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _questionController,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: 'Write your question here...',
-                  hintStyle: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 14,
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  '0/500',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.yellow[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Checkbox(
-                      value: _isAnonymous,
-                      onChanged: (value) {
-                        setState(() {
-                          _isAnonymous = value ?? false;
-                        });
-                        Navigator.pop(context);
-                        _showAskQuestionDialog();
-                      },
-                      activeColor: const Color(0xFFF5A623),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Send as Anonymous',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF2D2D2D),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'None will be able to see your name',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
+                    const Text(
+                      'Ask a Question',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2D2D2D),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.lightbulb_outline,
-                      color: Color(0xFF5B9BD5),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Question Tips',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF5B9BD5),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '• Be clear and specific about what you want to know',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                          Text(
-                            '• Briefly explain why this question is important',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.grey[300]!),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const Text(
-                        'CANCEL',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2D2D2D),
-                        ),
-                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Your Question',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF2D2D2D),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -434,22 +293,42 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'SEND',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                        child: const Text(
+                          'CANCEL',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2D2D2D),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _submitQuestion,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF5B9BD5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'SEND',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -502,11 +381,13 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             ),
           ),
           Expanded(
-            child: _selectedTab == 0
-                ? _buildQATab()
-                : _selectedTab == 1
-                    ? _buildPollsTab()
-                    : _buildCheckInTab(),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _selectedTab == 0
+                    ? _buildQATab()
+                    : _selectedTab == 1
+                        ? _buildPollsTab()
+                        : _buildCheckInTab(),
           ),
         ],
       ),
@@ -965,7 +846,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                   fontWeight: FontWeight.w600,
                   color: selectedOptionId != null ? Colors.white : Colors.grey[600],
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -1275,12 +1156,4 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
       ),
     );
   }
-}
-
-class PollOption {
-  final String text;
-  final double percentage;
-  final bool isSelected;
-
-  PollOption(this.text, this.percentage, this.isSelected);
 }

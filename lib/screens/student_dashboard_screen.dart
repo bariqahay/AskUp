@@ -123,6 +123,21 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
   }
 
+  List<Map<String, dynamic>> _activeSessions = [];
+  bool _isLoading = true;
+
+  // Stats
+  int _totalQuestions = 0;
+  int _totalPolls = 0;
+  double _attendanceRate = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActiveSessions();
+    _loadStats();
+  }
+
   @override
   void dispose() {
     _sessionCodeController.dispose();
@@ -228,6 +243,20 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     );
   }
 
+  void _showSnack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color),
+    );
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -321,8 +350,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   ),
                 ],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+
+              const SizedBox(height: 24),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'JOIN SESSION',
@@ -333,53 +365,15 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                       letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _sessionCodeController,
-                          decoration: InputDecoration(
-                            hintText: 'Enter session code',
-                            hintStyle: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 14,
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[100],
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                              borderSide: BorderSide.none,
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                        ),
+                  if (_activeSessions.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
                       ),
-                      const SizedBox(width: 12),
-                      ElevatedButton(
-                        onPressed: _joinSession,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF5B9BD5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 14,
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'JOIN',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF34C759),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ],
                   ),
@@ -415,8 +409,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFFF5A623),
-                          letterSpacing: 0.5,
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
@@ -427,12 +419,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
-                  ),
                 ],
               ),
-            ),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 12),
 
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -564,13 +554,34 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
+                        )
+                      : Column(
+                          children: _activeSessions.map((session) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _buildActiveSessionCard(
+                                sessionId: session['id'].toString(),
+                                title: session['title'] ?? 'Session',
+                                lecturer: session['classes']?['users']?['name'] ?? 'Lecturer',
+                                code: session['session_code'] ?? '-',
+                                newQuestions: session['new_questions'] ?? 0,
+                                hasActivePoll: session['has_active_poll'] ?? false,
+                              ),
+                            );
+                          }).toList(),
                         ),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ],
+
+              const SizedBox(height: 16),
+
+              GestureDetector(
+                onTap: () {},
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF5B9BD5), Color(0xFF4A8BC2)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -594,16 +605,17 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   ],
                 ),
               ),
-            ),
 
-            const SizedBox(height: 20),
-          ],
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildActiveSessionCard({
+    required String sessionId,
     required String title,
     required String lecturer,
     required String code,
@@ -628,9 +640,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
               code: code,
             ),
           ),
-        );
+        ).then((_) => _loadActiveSessions());
       },
-
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -638,7 +649,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: isDark ? [] : [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
+              color: Colors.black.withOpacity(0.05),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -673,26 +684,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     ],
                   ),
                 ),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Colors.green,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ],
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ],
             ),
@@ -768,7 +766,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           label,
           style: TextStyle(
             fontSize: 11,
-            color: Colors.white.withValues(alpha: 0.9),
+            color: Colors.white.withOpacity(0.9),
           ),
         ),
       ],

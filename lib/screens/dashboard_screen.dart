@@ -1,6 +1,7 @@
 // dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math';
 import '../widgets/active_session_card.dart';
 import '../widgets/session_history_item.dart';
 import 'profile_screen.dart';
@@ -38,7 +39,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final active = await supabase
           .from('sessions')
           .select(
-            'id, title, start_time, end_time, status, class_id, '
+            'id, title, start_time, end_time, status, class_id, session_code, '
             'classes!inner(title, code, lecturer_id)',
           )
           .eq('classes.lecturer_id', widget.lecturerId)
@@ -47,7 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final history = await supabase
           .from('sessions')
           .select(
-            'id, title, start_time, end_time, status, class_id, '
+            'id, title, start_time, end_time, status, class_id, session_code, '
             'classes!inner(title, code, lecturer_id)',
           )
           .eq('classes.lecturer_id', widget.lecturerId)
@@ -117,8 +118,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (context) => _CreateSessionDialog(
         lecturerId: widget.lecturerId,
-        onSessionCreated: () {
-          _loadSessions();
+        lecturerName: widget.lecturerName,
+        onSessionCreated: (sessionData) {
+          // Navigate langsung ke SessionDetailScreen
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SessionDetailScreen(
+                sessionId: sessionData['id'],
+                title: sessionData['title'],
+                classCode: sessionData['session_code'], // ⬅️ pakai session_code
+                totalStudents: 0, // baru dibuat, belum ada students
+                lecturerId: widget.lecturerId,
+                lecturerName: widget.lecturerName,
+              ),
+            ),
+          ).then((_) => _loadSessions()); // refresh dashboard setelah balik
         },
       ),
     );
@@ -180,17 +195,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 builder: (context) => SessionDetailScreen(
                                                   sessionId: s['id'].toString(),
                                                   title: s['title'] ?? 'Untitled',
-                                                  classCode: s['classes']?['code'] ?? '-',
+                                                  classCode: s['session_code'] ?? '-', // ⬅️ session_code
                                                   totalStudents: s['total_students'] ?? 0,
                                                   lecturerId: widget.lecturerId,
                                                   lecturerName: widget.lecturerName,
                                                 ),
                                               ),
-                                            );
+                                            ).then((_) => _loadSessions());
                                           },
                                           child: ActiveSessionCard(
                                             title: s['title'] ?? 'Untitled',
-                                            code: s['classes']?['code'] ?? '-',
+                                            code: s['session_code'] ?? '-', // ⬅️ session_code
                                             currentStudents: s['total_students'] ?? 0,
                                             totalStudents: s['total_students'] ?? 0,
                                             statusColor: const Color(0xFF4CAF50),
@@ -369,10 +384,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
    ------------------------- */
 class _CreateSessionDialog extends StatefulWidget {
   final String lecturerId;
-  final VoidCallback onSessionCreated;
+  final String lecturerName;
+  final Function(Map<String, dynamic>) onSessionCreated;
 
   const _CreateSessionDialog({
     required this.lecturerId,
+    required this.lecturerName,
     required this.onSessionCreated,
   });
 
@@ -431,6 +448,13 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     }
   }
 
+  // Generate random 6-character session code
+  String _generateSessionCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    return List.generate(6, (index) => chars[random.nextInt(chars.length)]).join();
+  }
+
   Future<void> _createSession() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedClassId == null) {
@@ -444,13 +468,31 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
     if (mounted) setState(() => _isCreating = true);
 
     try {
-      await supabase.from('sessions').insert({
+      // Generate unique session code
+      String sessionCode;
+      bool isUnique = false;
+      
+      do {
+        sessionCode = _generateSessionCode();
+        // Check if code already exists
+        final existing = await supabase
+            .from('sessions')
+            .select('id')
+            .eq('session_code', sessionCode)
+            .maybeSingle();
+        
+        isUnique = existing == null;
+      } while (!isUnique);
+
+      // Insert session dengan session_code
+      final response = await supabase.from('sessions').insert({
         'class_id': _selectedClassId,
         'title': _sessionNameController.text.trim(),
         'description': _descriptionController.text.trim(),
+        'session_code': sessionCode, // ⬅️ kode unik per session
         'start_time': DateTime.now().toIso8601String(),
         'status': 'active',
-      });
+      }).select().single();
 
       if (mounted) {
         Navigator.of(context).pop();
@@ -460,7 +502,13 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
             backgroundColor: Color(0xFF4CAF50),
           ),
         );
-        widget.onSessionCreated();
+        
+        // ⬅️ Pass session data ke callback untuk navigate
+        widget.onSessionCreated({
+          'id': response['id'],
+          'title': response['title'],
+          'session_code': response['session_code'],
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _isCreating = false);
@@ -644,7 +692,7 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'A clear session name helps students identify and join the right class quickly.',
+                                    'A unique session code will be generated automatically. Students can join using this code or by scanning the QR code.',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.blue[800],
