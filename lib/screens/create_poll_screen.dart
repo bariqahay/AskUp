@@ -246,22 +246,27 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: Icon(Icons.arrow_back, color: textColor),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'CREATE POLL',
               style: TextStyle(
-                color: Colors.black,
+                color: textColor,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -269,7 +274,7 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
             Text(
               'Engage students with interactive questions',
               style: TextStyle(
-                color: Colors.grey[600],
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
                 fontSize: 12,
                 fontWeight: FontWeight.normal,
               ),
@@ -283,17 +288,23 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
           Container(
             margin: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.grey[200],
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey[800]
+                  : Colors.grey[200],
               borderRadius: BorderRadius.circular(25),
             ),
             child: TabBar(
               controller: _tabController,
               indicator: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey[700]
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(25),
               ),
-              labelColor: Colors.black,
-              unselectedLabelColor: Colors.grey[600],
+              labelColor: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
+              unselectedLabelColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey[400]
+                  : Colors.grey[600],
               labelStyle: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
@@ -327,11 +338,12 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Poll Type Section
-          const Text(
+          Text(
             'Poll Type',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
+              color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
             ),
           ),
           const SizedBox(height: 12),
@@ -368,11 +380,12 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
           const SizedBox(height: 24),
 
           // Poll Question Section
-          const Text(
+          Text(
             'Poll Question',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
+              color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
             ),
           ),
           const SizedBox(height: 12),
@@ -380,11 +393,14 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
           TextField(
             controller: _questionController,
             maxLines: 3,
+            style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black),
             decoration: InputDecoration(
               hintText: 'Ask a clear, engaging question...',
               hintStyle: TextStyle(color: Colors.grey[400]),
               filled: true,
-              fillColor: Colors.grey[100],
+              fillColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.grey[800]
+                  : Colors.grey[100],
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -399,11 +415,12 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Options',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
                   ),
                 ),
                 TextButton.icon(

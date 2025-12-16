@@ -41,72 +41,91 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Scaffold(
-      backgroundColor: Colors.white,
-      resizeToAvoidBottomInset: true, // biar body ikut naik pas keyboard muncul
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
-        child: SingleChildScrollView(        // <--- tambahin ini
+        child: SingleChildScrollView(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                SizedBox(height: 60), // tambahin spacing biar ga terlalu ngejepit
-                SizedBox(
+                const SizedBox(height: 60),
+                Container(
                   height: 180,
-                  child: Image.network(
-                    'https://via.placeholder.com/200x200.png?text=Reset+Password',
-                    fit: BoxFit.contain,
+                  width: 180,
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.grey[800] : Colors.blue[50],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.lock_reset,
+                    size: 80,
+                    color: isDark ? Colors.blue[300] : Colors.blue[700],
                   ),
                 ),
-                SizedBox(height: 32),
+                const SizedBox(height: 32),
                 Text(
                   'Forgot Password',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Please enter your email address to reset your password',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 15, color: Colors.black54),
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
                 ),
-                SizedBox(height: 32),
+                const SizedBox(height: 32),
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  style: TextStyle(color: textColor),
                   decoration: InputDecoration(
                     hintText: 'Email address',
+                    hintStyle: TextStyle(color: Colors.grey[400]),
                     filled: true,
-                    fillColor: Colors.grey.shade100,
+                    fillColor: isDark ? Colors.grey[800] : Colors.grey[100],
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
                     ),
                     contentPadding:
-                        EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   height: 48,
                   child: ElevatedButton(
                     onPressed: isLoading ? null : _sendResetEmail,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: const Color(0xFF5B9BD5),
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                     child: isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
-                        : Text(
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
                             'Reset Password',
                             style: TextStyle(fontSize: 16, color: Colors.white),
                           ),
                   ),
                 ),
-                SizedBox(height: 80), // biar ga mentok sama keyboard
+                const SizedBox(height: 80),
               ],
             ),
           ),

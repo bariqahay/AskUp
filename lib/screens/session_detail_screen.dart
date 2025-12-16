@@ -373,7 +373,7 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                         ),
                         const SizedBox(height: 16),
                         QrImageView(
-                          data: widget.classCode,
+                          data: 'askup://session/${widget.sessionId}',
                           size: 150,
                         ),
                         const SizedBox(height: 12),

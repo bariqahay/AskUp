@@ -1,492 +1,410 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
+import '../widgets/theme_switcher.dart';
 
 class StudentProfileScreen extends StatefulWidget {
-  const StudentProfileScreen({super.key});
+  final String studentId;
+
+  const StudentProfileScreen({
+    super.key,
+    required this.studentId,
+  });
 
   @override
   State<StudentProfileScreen> createState() => _StudentProfileScreenState();
 }
 
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
+  final supabase = Supabase.instance.client;
+  final ImagePicker _picker = ImagePicker();
+
+  bool _isLoading = true;
+
+  // User
+  String _name = '';
+  String _email = '';
+  String _department = '-';
+  String _studentId = '-';
+  String _avatarUrl = '';
   bool pushNotifications = true;
   bool emailNotifications = true;
-  bool darkMode = false;
+  String _initials = 'ST';
+
+  // Stats
+  int _questionsAsked = 0;
+  int _pollsAnswered = 0;
+  int _participationRate = 0;
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D2D2D)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Profile',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2D2D2D),
-              ),
-            ),
-            Text(
-              'Manage your account and preferences',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Profile Section
-          Container(
+  void initState() {
+    super.initState();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
+    await Future.wait([
+      _loadProfile(),
+      _loadStats(),
+    ]);
+
+    setState(() => _isLoading = false);
+  }
+
+  // ================= USER =================
+  Future<void> _loadProfile() async {
+    final user = await supabase
+        .from('users')
+        .select(
+            'name, email, department, employee_id, avatar_url, push_notifications, email_updates')
+        .eq('id', widget.studentId)
+        .single();
+
+    _name = user['name'];
+    _avatarUrl = user['avatar_url'] ?? '';
+    _email = user['email'];
+    _department = user['department'] ?? '-';
+    _studentId = user['employee_id'] ?? '-';
+    pushNotifications = user['push_notifications'] ?? true;
+    emailNotifications = user['email_updates'] ?? true;
+
+    final parts = _name.split(' ');
+    _initials = parts.length >= 2
+        ? '${parts[0][0]}${parts[1][0]}'.toUpperCase()
+        : _name.substring(0, 2).toUpperCase();
+  }
+
+  // ================= STATS =================
+  Future<void> _loadStats() async {
+    // Questions asked
+    final questions = await supabase
+        .from('questions')
+        .select('id')
+        .eq('student_id', widget.studentId);
+
+    _questionsAsked = questions.length;
+
+    // Polls answered (pakai session_participants)
+    final polls = await supabase
+        .from('session_participants')
+        .select('id')
+        .eq('student_id', widget.studentId);
+
+    _pollsAnswered = polls.length;
+
+    // Participation rate (simple version)
+    final sessions = await supabase.from('sessions').select('id');
+
+    if (sessions.isNotEmpty) {
+      _participationRate =
+          ((_pollsAnswered / sessions.length) * 100).round();
+    }
+  }
+
+  // ================= UPDATE PREF =================
+  Future<void> _updatePreferences() async {
+    await supabase.from('users').update({
+      'push_notifications': pushNotifications,
+      'email_updates': emailNotifications,
+    }).eq('id', widget.studentId);
+  }
+
+  // ================= AVATAR UPLOAD =================
+  Future<void> _pickAndUploadAvatar() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 75,
+      );
+
+      if (pickedFile == null) return;
+
+      if (!mounted) return;
+      setState(() => _isLoading = true);
+
+      final File imageFile = File(pickedFile.path);
+      final String fileName = 'avatar_${widget.studentId}.${pickedFile.path.split('.').last}';
+      final String filePath = 'avatars/$fileName';
+
+      await supabase.storage.from('avatars').upload(
+            filePath,
+            imageFile,
+            fileOptions: const FileOptions(upsert: true),
+          );
+
+      final String publicUrl = supabase.storage.from('avatars').getPublicUrl(filePath);
+      await supabase.from('users').update({'avatar_url': publicUrl}).eq('id', widget.studentId);
+
+      if (mounted) {
+        setState(() {
+          _avatarUrl = publicUrl;
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Avatar updated'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // ================= EDIT PROFILE =================
+  void _showEditProfileModal() {
+    final nameController = TextEditingController(text: _name);
+    final emailController = TextEditingController(text: _email);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          child: Padding(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF5B9BD5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'PT',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                const Text('Edit Profile',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickAndUploadAvatar();
+                  },
+                  child: Stack(
                     children: [
-                      const Text(
-                        'Paldo Tampu',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D2D2D),
-                        ),
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: const Color(0xFF5B9BD5),
+                        backgroundImage:
+                            _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
+                        child: _avatarUrl.isEmpty
+                            ? Text(_initials,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 32))
+                            : null,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'paldo.tampu@university.edu',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                          decoration: TextDecoration.underline,
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.blue,
+                          ),
+                          child: const Icon(Icons.edit, color: Colors.white, size: 18),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Account Information Section
-          const Text(
-            'Account Information',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D2D2D),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'Full Name'),
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow('Major', 'Computer Science'),
                 const SizedBox(height: 16),
-                _buildInfoRow('Student ID', 'E1703109S'),
-                const SizedBox(height: 16),
-                _buildInfoRow('Year', '3'),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Activity Statistics Section
-          const Text(
-            'Activity Statistics',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D2D2D),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
+                TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  keyboardType: TextInputType.emailAddress,
                 ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem('38', 'Questions Asked', const Color(0xFF5B9BD5)),
-                Container(
-                  width: 1,
-                  height: 50,
-                  color: Colors.grey[300],
-                ),
-                _buildStatItem('20', 'Polls Answered', const Color(0xFFF5A623)),
-                Container(
-                  width: 1,
-                  height: 50,
-                  color: Colors.grey[300],
-                ),
-                _buildStatItem('91', 'Participation Rate', const Color(0xFF34C759)),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Preferences Section
-          const Text(
-            'Preferences',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D2D2D),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                _buildToggleRow(
-                  'Push Notifications',
-                  'Receive notifications on mobile and web',
-                  pushNotifications,
-                  (value) {
-                    setState(() {
-                      pushNotifications = value;
-                    });
-                  },
-                ),
-                Divider(height: 24, color: Colors.grey[200]),
-                _buildToggleRow(
-                  'Email Updates',
-                  'Receive weekly summary via email',
-                  emailNotifications,
-                  (value) {
-                    setState(() {
-                      emailNotifications = value;
-                    });
-                  },
-                ),
-                Divider(height: 24, color: Colors.grey[200]),
-                _buildToggleRow(
-                  'Dark Mode',
-                  'Switch dark theme for better visibility',
-                  darkMode,
-                  (value) {
-                    setState(() {
-                      darkMode = value;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Account Section
-          const Text(
-            'Account',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D2D2D),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          _buildActionButton(
-            '🔒 Change Password',
-            Colors.white,
-            const Color(0xFF5B9BD5),
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Change password feature'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 12),
-
-          _buildActionButton(
-            '📧 Update Email',
-            Colors.white,
-            const Color(0xFF5B9BD5),
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Update email feature'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 12),
-
-          _buildActionButton(
-            'ℹ️ About AskUp',
-            Colors.white,
-            const Color(0xFF5B9BD5),
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('About AskUp'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 12),
-
-          _buildActionButton(
-            '🚪 Log Out',
-            const Color(0xFFFFEBEE),
-            const Color(0xFFE53935),
-            () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Log Out'),
-                  content: const Text('Are you sure you want to log out?'),
-                  actions: [
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: const Text('Cancel'),
                     ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.pop(context);
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: () async {
+                        try {
+                          await supabase.from('users').update({
+                            'name': nameController.text.trim(),
+                            'email': emailController.text.trim(),
+                          }).eq('id', widget.studentId);
+
+                          await _loadProfile();
+                          if (mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Profile updated'),
+                                  backgroundColor: Colors.green),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Failed to update'),
+                                  backgroundColor: Colors.red),
+                            );
+                          }
+                        }
                       },
-                      child: const Text(
-                        'Log Out',
-                        style: TextStyle(color: Colors.red),
-                      ),
+                      child: const Text('Save'),
                     ),
                   ],
-                ),
-              );
-            },
-          ),
-
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey[600],
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF2D2D2D),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatItem(String value, String label, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToggleRow(
-    String title,
-    String subtitle,
-    bool value,
-    Function(bool) onChanged,
-  ) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF2D2D2D),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ),
-        ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-          activeColor: const Color(0xFF5B9BD5),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionButton(
-    String text,
-    Color backgroundColor,
-    Color textColor,
-    VoidCallback onPressed,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: textColor,
-                  ),
                 ),
               ],
             ),
           ),
-        ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile'),
+        leading: BackButton(color: textColor),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          // ================= PROFILE =================
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                radius: 30,
+                backgroundColor: const Color(0xFF5B9BD5),
+                backgroundImage:
+                    _avatarUrl.isNotEmpty ? NetworkImage(_avatarUrl) : null,
+                child: _avatarUrl.isEmpty
+                    ? Text(
+                        _initials,
+                        style: const TextStyle(color: Colors.white, fontSize: 20),
+                      )
+                    : null,
+              ),
+              title: Text(_name),
+              subtitle: Text(_email),
+              trailing: IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: _showEditProfileModal,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ================= ACCOUNT =================
+          const Text('Account Information'),
+          Card(
+            child: Column(
+              children: [
+                _row('Department', _department),
+                _row('Student ID', _studentId),
+                _row('Role', 'Student'),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ================= STATS =================
+          const Text('Activity Statistics'),
+          Card(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _stat(_questionsAsked.toString(), 'Questions'),
+                _stat(_pollsAnswered.toString(), 'Polls'),
+                _stat('$_participationRate%', 'Participation'),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ================= THEME =================
+          const Text('Appearance'),
+          const ThemeSwitcher(),
+
+          const SizedBox(height: 20),
+
+          // ================= PREF =================
+          const Text('Preferences'),
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Push Notifications'),
+                  value: pushNotifications,
+                  onChanged: (v) {
+                    setState(() => pushNotifications = v);
+                    _updatePreferences();
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Email Updates'),
+                  value: emailNotifications,
+                  onChanged: (v) {
+                    setState(() => emailNotifications = v);
+                    _updatePreferences();
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ================= ACTION =================
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              await supabase.auth.signOut();
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [Text(k), Text(v)],
+      ),
+    );
+  }
+
+  Widget _stat(String v, String l) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Text(v, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(l),
+        ],
       ),
     );
   }

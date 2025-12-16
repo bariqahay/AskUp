@@ -58,12 +58,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final historyList =
           (history ?? <dynamic>[]).map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
-      // Inject total_students (sequential — could be optimized)
+      // Get all session IDs
+      final allSessionIds = [
+        ...activeList.map((s) => s['id'].toString()),
+        ...historyList.map((s) => s['id'].toString()),
+      ];
+
+      // Batch query: Count students for all sessions in one query
+      final Map<String, int> studentCounts = {};
+      if (allSessionIds.isNotEmpty) {
+        final participants = await supabase
+            .from('session_participants')
+            .select('session_id')
+            .inFilter('session_id', allSessionIds);
+
+        // Count students per session
+        for (var p in (participants ?? [])) {
+          final sessionId = p['session_id'].toString();
+          studentCounts[sessionId] = (studentCounts[sessionId] ?? 0) + 1;
+        }
+      }
+
+      // Inject total_students from batch query results
       for (var s in activeList) {
-        s['total_students'] = await _getStudentCount(s['id'].toString());
+        s['total_students'] = studentCounts[s['id'].toString()] ?? 0;
       }
       for (var s in historyList) {
-        s['total_students'] = await _getStudentCount(s['id'].toString());
+        s['total_students'] = studentCounts[s['id'].toString()] ?? 0;
       }
 
       if (mounted) {
@@ -78,26 +99,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() => isLoading = false);
       }
       debugPrint("Error loading sessions: $e");
-    }
-  }
-
-  Future<int> _getStudentCount(String sessionId) async {
-    try {
-      final res = await supabase
-          .from('questions')
-          .select('student_id')
-          .eq('session_id', sessionId);
-      if (res == null) return 0;
-      final rows = (res as List).cast<Map>();
-      final uniqueIds = <dynamic>{};
-      for (var r in rows) {
-        final id = r['student_id'];
-        if (id != null) uniqueIds.add(id);
-      }
-      return uniqueIds.length;
-    } catch (e) {
-      debugPrint('Error counting students for session $sessionId: $e');
-      return 0;
     }
   }
 
@@ -125,8 +126,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: backgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -147,7 +150,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                             // Active sessions
                             activeSessions.isEmpty
-                                ? const Text('No active sessions available')
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(32),
+                                      child: Text(
+                                        'No active sessions available',
+                                        style: TextStyle(
+                                          color: Theme.of(context).brightness == Brightness.dark
+                                              ? Colors.grey[400]
+                                              : Colors.grey[600],
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  )
                                 : ListView.builder(
                                     shrinkWrap: true,
                                     physics: const NeverScrollableScrollPhysics(),
@@ -194,7 +210,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                             // Session history
                             sessionHistory.isEmpty
-                                ? const Text('No session history available')
+                                ? Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(32),
+                                      child: Text(
+                                        'No session history available',
+                                        style: TextStyle(
+                                          color: Theme.of(context).brightness == Brightness.dark
+                                              ? Colors.grey[400]
+                                              : Colors.grey[600],
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  )
                                 : ListView.builder(
                                     shrinkWrap: true,
                                     physics: const NeverScrollableScrollPhysics(),
@@ -229,21 +258,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _sectionTitle(String text) {
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
-        color: Color(0xFF2D2D2D),
+        color: textColor,
         letterSpacing: 0.5,
       ),
     );
   }
 
   Widget _buildHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    final cardColor = Theme.of(context).cardColor;
+    
     return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: cardColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -257,22 +291,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Flexible(
                       child: Text(
                         'Hi, ${widget.lecturerName}!',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2D2D2D),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Text(' 👋', style: TextStyle(fontSize: 18)),
+                    const Text('👋', style: TextStyle(fontSize: 20)),
                   ],
                 ),
-                const SizedBox(height: 2),
-                const Text(
+                const SizedBox(height: 4),
+                Text(
                   'Ready to engage your students?',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
                 ),
               ],
             ),

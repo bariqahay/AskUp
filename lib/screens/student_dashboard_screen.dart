@@ -1,16 +1,127 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'student_session_detail_screen.dart';
 import 'student_profile_screen.dart';
+import 'qr_scanner_screen.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
-  const StudentDashboardScreen({super.key});
+  final String? studentId;
+
+  const StudentDashboardScreen({super.key, this.studentId});
 
   @override
   State<StudentDashboardScreen> createState() => _StudentDashboardScreenState();
 }
 
 class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
+  final supabase = Supabase.instance.client;
   final TextEditingController _sessionCodeController = TextEditingController();
+  
+  // Real data from database
+  List<Map<String, dynamic>> _activeSessions = [];
+  bool _isLoading = true;
+  int _questionsCount = 0;
+  int _pollsCount = 0;
+  int _attendancePercentage = 0;
+  String _studentName = 'Student';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  Future<void> _loadDashboardData() async {
+    if (widget.studentId == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    
+    try {
+      // Load student name
+      final userData = await supabase
+          .from('users')
+          .select('name')
+          .eq('id', widget.studentId!)
+          .maybeSingle();
+      
+      if (userData != null) {
+        _studentName = userData['name'] ?? 'Student';
+      }
+
+      // Load active sessions that student has joined
+      final sessions = await supabase
+          .from('session_participants')
+          .select('session_id, sessions!inner(id, title, session_code, status, classes!inner(title, code))')
+          .eq('student_id', widget.studentId!)
+          .eq('sessions.status', 'active');
+
+      // Count new questions per session
+      final List<Map<String, dynamic>> sessionsList = [];
+      for (var participant in sessions) {
+        final session = participant['sessions'];
+        final sessionId = session['id'];
+        
+        // Count unanswered questions
+        final questions = await supabase
+            .from('questions')
+            .select('id')
+            .eq('session_id', sessionId)
+            .eq('status', 'pending');
+        
+        // Check if has active polls
+        final polls = await supabase
+            .from('polls')
+            .select('id')
+            .eq('session_id', sessionId);
+        
+        sessionsList.add({
+          'id': sessionId,
+          'title': session['title'],
+          'session_code': session['session_code'],
+          'class_title': session['classes']['title'],
+          'class_code': session['classes']['code'],
+          'new_questions': questions.length,
+          'has_active_poll': polls.length > 0,
+        });
+      }
+
+      // Load student stats
+      final questionsCount = await supabase
+          .from('questions')
+          .select('id')
+          .eq('student_id', widget.studentId!);
+
+      // Calculate attendance percentage
+      final totalSessions = await supabase
+          .from('session_participants')
+          .select('id')
+          .eq('student_id', widget.studentId!);
+
+      // Get total sessions available
+      final allSessions = await supabase
+          .from('sessions')
+          .select('id')
+          .neq('status', 'draft');
+
+      final attendancePercent = allSessions.length > 0
+          ? ((totalSessions.length / allSessions.length) * 100).round()
+          : 0;
+
+      setState(() {
+        _activeSessions = sessionsList;
+        _questionsCount = questionsCount.length;
+        _pollsCount = 0; // TODO: Implement when poll_votes exists
+        _attendancePercentage = attendancePercent;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading dashboard data: $e');
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -18,30 +129,114 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     super.dispose();
   }
 
-  void _joinSession() {
-    if (_sessionCodeController.text.isNotEmpty) {
+  void _joinSession() async {
+    final code = _sessionCodeController.text.trim();
+    if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Joining session: ${_sessionCodeController.text}'),
-          backgroundColor: Colors.green,
+        const SnackBar(
+          content: Text('Please enter a session code'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
+
+    if (widget.studentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Student ID not found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Query session by code
+      final session = await Supabase.instance.client
+          .from('sessions')
+          .select('id, title, session_code, status, classes!inner(title, code)')
+          .eq('session_code', code)
+          .eq('status', 'active')
+          .maybeSingle();
+
+      if (session == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Session not found or inactive'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Check-in student
+      await Supabase.instance.client
+          .from('session_participants')
+          .insert({
+        'session_id': session['id'],
+        'student_id': widget.studentId,
+      });
+
+      if (mounted) {
+        // Navigate to session detail
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => StudentSessionDetailScreen(
+              title: session['title'],
+              lecturer: session['classes']['title'],
+              code: session['classes']['code'],
+              sessionId: session['id'],
+              studentId: widget.studentId,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().contains('duplicate') 
+                ? 'Already joined this session' 
+                : 'Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   void _scanQRCode() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('QR Scanner will be implemented'),
-        backgroundColor: Colors.blue,
+    if (widget.studentId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Student ID not found'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QRScannerScreen(studentId: widget.studentId!),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: backgroundColor,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(20),
@@ -53,27 +248,27 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: const [
+                      children: [
                         Text(
-                          'Hi, John! ',
+                          'Hi, $_studentName! ',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF2D2D2D),
+                            color: textColor,
                           ),
                         ),
-                        Text(
+                        const Text(
                           '👋',
                           style: TextStyle(fontSize: 20),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Ready to learn?',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.grey,
+                        color: isDark ? Colors.grey[400] : Colors.grey,
                       ),
                     ),
                   ],
@@ -83,7 +278,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const StudentProfileScreen(),
+                        builder: (context) => StudentProfileScreen(
+                          studentId: widget.studentId!,
+                        ),
                       ),
                     );
                   },
@@ -114,9 +311,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardColor,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
+                boxShadow: isDark ? [] : [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
@@ -127,12 +324,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'JOIN SESSION',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF2D2D2D),
+                      color: textColor,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -189,18 +386,18 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(child: Divider(color: Colors.grey[300])),
+                      Expanded(child: Divider(color: isDark ? Colors.grey[700] : Colors.grey[300])),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Text(
                           'or',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
                           ),
                         ),
                       ),
-                      Expanded(child: Divider(color: Colors.grey[300])),
+                      Expanded(child: Divider(color: isDark ? Colors.grey[700] : Colors.grey[300])),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -223,7 +420,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Colors.grey[300]!),
+                        side: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -240,12 +437,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'ACTIVE SESSIONS',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF2D2D2D),
+                    color: textColor,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -258,9 +455,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     color: const Color(0xFF34C759),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    '2 Joined',
-                    style: TextStyle(
+                  child: Text(
+                    '${_activeSessions.length} Joined',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -272,25 +469,65 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
             const SizedBox(height: 12),
 
-            _buildActiveSessionCard(
-              title: 'AI & Machine Learning',
-              lecturer: 'Prof. Smith',
-              code: 'ABC123',
-              newQuestions: 2,
-              hasActivePoll: true,
-              statusColor: Colors.red,
-            ),
-
-            const SizedBox(height: 12),
-
-            _buildActiveSessionCard(
-              title: 'Data Structures',
-              lecturer: 'Dr. Johnson',
-              code: 'DEF456',
-              newQuestions: 0,
-              hasActivePoll: false,
-              statusColor: Colors.green,
-            ),
+            // Show loading or sessions list
+            _isLoading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                : _activeSessions.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.school_outlined,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No active sessions',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Join a session using code or QR scanner',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        children: _activeSessions.map((session) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildActiveSessionCard(
+                              title: session['title'],
+                              lecturer: session['class_title'],
+                              code: session['class_code'],
+                              newQuestions: session['new_questions'],
+                              hasActivePoll: session['has_active_poll'],
+                              statusColor: Colors.green,
+                              isDark: isDark,
+                              cardColor: cardColor,
+                              textColor: textColor,
+                              sessionId: session['id'],
+                            ),
+                          );
+                        }).toList(),
+                      ),
 
             const SizedBox(height: 16),
 
@@ -339,19 +576,19 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildStatItem('12', 'Questions Asked'),
+                        _buildStatItem('$_questionsCount', 'Questions Asked'),
                         Container(
                           width: 1,
                           height: 40,
                           color: Colors.white.withValues(alpha: 0.3),
                         ),
-                        _buildStatItem('8', 'Polls Answered'),
+                        _buildStatItem('$_pollsCount', 'Polls Answered'),
                         Container(
                           width: 1,
                           height: 40,
                           color: Colors.white.withValues(alpha: 0.3),
                         ),
-                        _buildStatItem('95%', 'Attendance'),
+                        _buildStatItem('$_attendancePercentage%', 'Attendance'),
                       ],
                     ),
                   ],
@@ -373,6 +610,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     required int newQuestions,
     required bool hasActivePoll,
     required Color statusColor,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
+    required String sessionId,
   }) {
     return GestureDetector(
       onTap: () {
@@ -380,6 +621,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           context,
           MaterialPageRoute(
             builder: (context) => StudentSessionDetailScreen(
+              sessionId: sessionId,
+              studentId: widget.studentId,
               title: title,
               lecturer: lecturer,
               code: code,
@@ -391,9 +634,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: cardColor,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: [
+          boxShadow: isDark ? [] : [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 8,
@@ -413,10 +656,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF2D2D2D),
+                          color: textColor,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -424,7 +667,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                         '$lecturer • $code',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey[600],
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
                         ),
                       ),
                     ],
@@ -499,7 +742,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 Icon(
                   Icons.arrow_forward_ios,
                   size: 14,
-                  color: Colors.grey[400],
+                  color: isDark ? Colors.grey[600] : Colors.grey[400],
                 ),
               ],
             ),

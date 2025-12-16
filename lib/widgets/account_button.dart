@@ -18,16 +18,24 @@ class AccountButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         decoration: BoxDecoration(
-          color: isLogout ? Colors.red[50] : Colors.white,
+          color: isLogout 
+              ? (isDark ? Colors.red[900]!.withOpacity(0.2) : Colors.red[50]) 
+              : cardColor,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isLogout ? Colors.red.withOpacity(0.3) : Colors.grey[300]!,
+            color: isLogout 
+                ? Colors.red.withOpacity(0.3) 
+                : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
           ),
         ),
         child: Row(
@@ -44,14 +52,14 @@ class AccountButton extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: isLogout ? Colors.red : Colors.black,
+                  color: isLogout ? Colors.red : textColor,
                 ),
               ),
             ),
             Icon(
               Icons.arrow_forward_ios,
               size: 16,
-              color: isLogout ? Colors.red : Colors.grey[500],
+              color: isLogout ? Colors.red : (isDark ? Colors.grey[400] : Colors.grey[500]),
             ),
           ],
         ),

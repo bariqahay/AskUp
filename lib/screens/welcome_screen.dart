@@ -8,8 +8,12 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: backgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -38,15 +42,15 @@ class WelcomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 // Title
-                const Text(
+                Text(
                   'Welcome to AskUp+',
                   style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w600, color: Color(0xFF2D2D2D)),
+                      fontSize: 20, fontWeight: FontWeight.w600, color: textColor),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Choose your role to get started',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
                 ),
                 const SizedBox(height: 32),
                 // Lecturer Role
@@ -95,7 +99,7 @@ class WelcomeScreen extends StatelessWidget {
                 const SizedBox(height: 60),
                 Text(
                   'Need help? Contact your IT administrator',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: isDark ? Colors.grey[400] : Colors.grey[600]),
                 ),
                 const SizedBox(height: 20),
               ],

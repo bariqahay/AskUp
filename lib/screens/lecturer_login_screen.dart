@@ -202,19 +202,25 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                       focusNode: _passwordFocus,
                     ),
                     const SizedBox(height: 12),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Checkbox(
                               value: rememberMe,
+                              activeColor: const Color(0xFF5B9BD5),
                               onChanged: (value) =>
                                   setState(() => rememberMe = value ?? false),
                             ),
-                            const Text('Remember me'),
+                            const Text(
+                              'Remember me',
+                              style: TextStyle(
+                                color: Color(0xFF2D2D2D),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ],
                         ),
                         TextButton(
@@ -231,6 +237,7 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                             style: TextStyle(
                               color: Color(0xFF5B9BD5),
                               fontWeight: FontWeight.w500,
+                              fontSize: 14,
                             ),
                           ),
                         ),
@@ -244,8 +251,10 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                         onPressed: isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF5B9BD5),
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12)),
+                          elevation: 2,
                         ),
                         child: isLoading
                             ? const SizedBox(
@@ -254,9 +263,12 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                                 child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                               )
                             : const Text(
-                                'Sign In',
+                                'SIGN IN',
                                 style: TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w600),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.0,
+                                    color: Colors.white),
                               ),
                       ),
                     ),
@@ -284,21 +296,39 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF2D2D2D))),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
           obscureText: obscure,
           focusNode: focusNode,
           onSubmitted: onSubmitted,
+          style: const TextStyle(color: Color(0xFF2D2D2D)),
           decoration: InputDecoration(
+            hintText: obscure ? 'Enter your password' : 'Enter your email',
+            hintStyle: TextStyle(color: Colors.grey[400]),
+            prefixIcon: Icon(
+              obscure ? Icons.lock_outline : Icons.email_outlined,
+              color: const Color(0xFF5B9BD5),
+            ),
             contentPadding:
-                const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF5B9BD5), width: 2),
             ),
           ),
         ),

@@ -20,12 +20,16 @@ class ActiveSessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: Colors.white,
-        boxShadow: [
+        color: cardColor,
+        boxShadow: isDark ? [] : [
           BoxShadow(
             color: Colors.grey.withOpacity(0.15),
             blurRadius: 6,
@@ -42,9 +46,10 @@ class ActiveSessionCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
+                  color: textColor,
                 ),
               ),
               Container(
@@ -76,7 +81,7 @@ class ActiveSessionCard extends StatelessWidget {
               valueColor: AlwaysStoppedAnimation(
                 progressColors.isNotEmpty ? progressColors.first : Colors.blue,
               ),
-              backgroundColor: Colors.grey[200],
+              backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
             ),
           ),
 
@@ -85,10 +90,10 @@ class ActiveSessionCard extends StatelessWidget {
           // Student count text
           Text(
             '$currentStudents of $totalStudents students',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w400,
-              color: Colors.grey,
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
             ),
           ),
         ],

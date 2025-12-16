@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/preference_toggle.dart';
 import '../widgets/account_button.dart';
+import '../widgets/theme_switcher.dart';
 
 class ProfileScreen extends StatefulWidget {
   final Map<String, dynamic> lecturerData;
@@ -455,20 +456,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ===== UI =====
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D2D2D)),
+          icon: Icon(Icons.arrow_back, color: textColor),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            Text('Manage your account and preferences', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text('Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textColor)),
+            Text('Manage your account and preferences', style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600])),
           ],
         ),
       ),
@@ -499,12 +505,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
+        boxShadow: isDark ? [] : [
           BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2)),
         ],
       ),
@@ -512,22 +522,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           GestureDetector(
             onTap: _showEditProfileModal,
-            child: Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                borderRadius: BorderRadius.circular(30),
-                image: avatarUrl.isNotEmpty
-                    ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover)
-                    : null,
-              ),
-              child: avatarUrl.isEmpty
-                  ? Center(
-                      child: Text(name.isNotEmpty ? name[0] : 'U',
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    )
-                  : null,
+            child: Stack(
+              children: [
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF5B9BD5),
+                    borderRadius: BorderRadius.circular(35),
+                    image: avatarUrl.isNotEmpty
+                        ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover)
+                        : null,
+                  ),
+                  child: avatarUrl.isEmpty
+                      ? Center(
+                          child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'L',
+                              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                        )
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF5B9BD5),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: cardColor, width: 2),
+                    ),
+                    child: const Icon(Icons.edit, color: Colors.white, size: 14),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 16),
@@ -535,16 +562,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
                 const SizedBox(height: 4),
-                Text(email, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                Text(email, style: TextStyle(fontSize: 13, color: isDark ? Colors.grey[400] : Colors.grey[600])),
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(6)),
+                  decoration: BoxDecoration(color: const Color(0xFF5B9BD5), borderRadius: BorderRadius.circular(6)),
                   child: Text(
-                    role,
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                    role.toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
                   ),
                 ),
               ],
@@ -570,36 +597,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildAccountInfo() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: isDark ? [] : [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2)),
+        ],
+      ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('Department', style: TextStyle(color: Colors.grey)),
-              Text('Employee ID', style: TextStyle(color: Colors.grey)),
+            children: [
+              Text('Department', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13)),
+              Text('Employee ID', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13)),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(department, style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(employeeId, style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(department, style: TextStyle(fontWeight: FontWeight.w600, color: textColor, fontSize: 15)),
+              Text(employeeId, style: TextStyle(fontWeight: FontWeight.w600, color: textColor, fontSize: 15)),
             ],
           ),
           const SizedBox(height: 16),
-          const Divider(),
+          Divider(color: isDark ? Colors.grey[700] : Colors.grey[300]),
           const SizedBox(height: 16),
           Row(
             children: [
-              const Text('Member Since', style: TextStyle(color: Colors.grey)),
+              Text('Member Since', style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600], fontSize: 13)),
               const SizedBox(width: 6),
               Text(
                 memberSince != null ? "${memberSince!.month}/${memberSince!.year}" : '-',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                style: TextStyle(fontWeight: FontWeight.w600, color: textColor, fontSize: 15),
               ),
             ],
           ),
@@ -621,10 +658,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildPreferencesSection() {
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Preferences', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Appearance', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
+        const SizedBox(height: 12),
+        const ThemeSwitcher(),
+        const SizedBox(height: 24),
+        Text('Preferences', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
         const SizedBox(height: 12),
         PreferenceToggle(
           title: 'Push Notifications',
@@ -644,16 +687,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildAccountActions() {
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Text('Account', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
         const SizedBox(height: 12),
-        AccountButton(icon: Icons.lock_outline, text: 'Change Password', iconColor: Colors.blue, onTap: _showChangePasswordModal),
+        AccountButton(icon: Icons.lock_outline, text: 'Change Password', iconColor: const Color(0xFF5B9BD5), onTap: _showChangePasswordModal),
         const SizedBox(height: 12),
-        AccountButton(icon: Icons.email_outlined, text: 'Update Email', iconColor: Colors.blue, onTap: _showUpdateEmailModal),
+        AccountButton(icon: Icons.email_outlined, text: 'Update Email', iconColor: const Color(0xFF5B9BD5), onTap: _showUpdateEmailModal),
         const SizedBox(height: 12),
-        AccountButton(icon: Icons.info_outline, text: 'About AskUp', iconColor: Colors.blue, onTap: _showAboutModal),
+        AccountButton(icon: Icons.info_outline, text: 'About AskUp', iconColor: const Color(0xFF5B9BD5), onTap: _showAboutModal),
         const SizedBox(height: 12),
         AccountButton(
           icon: Icons.logout,

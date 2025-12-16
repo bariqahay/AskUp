@@ -53,5 +53,20 @@
 	<string>We need access to your camera to take profile pictures.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Required if you want to record videos with sound.</string>
+
+	<!-- ===== DEEP LINK FOR PASSWORD RESET ===== -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.example.ask_up</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>myapp</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -166,22 +166,27 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: Icon(Icons.arrow_back, color: textColor),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Q&A Management',
               style: TextStyle(
-                color: Colors.black,
+                color: textColor,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -189,7 +194,7 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
             Text(
               'Moderate and respond to student questions',
               style: TextStyle(
-                color: Colors.grey[600],
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
                 fontSize: 12,
                 fontWeight: FontWeight.normal,
               ),
@@ -205,14 +210,15 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
             child: TextField(
               controller: _searchController,
               onChanged: (_) => _filterQuestions(),
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
-                hintText: 'Search Question...',
+                hintText: 'Search questions...',
                 hintStyle: TextStyle(color: Colors.grey[400]),
                 prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: isDark ? Colors.grey[800] : Colors.grey[100],
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -279,6 +285,8 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
 
   Widget _buildFilterChip(String label, int count) {
     final isSelected = _selectedFilter == label;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -289,16 +297,20 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue[50] : Colors.grey[100],
+          color: isSelected
+              ? (isDark ? const Color(0xFF5B9BD5).withOpacity(0.2) : Colors.blue[50])
+              : (isDark ? Colors.grey[800] : Colors.grey[100]),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? Colors.blue : Colors.transparent,
+            color: isSelected ? const Color(0xFF5B9BD5) : Colors.transparent,
           ),
         ),
         child: Text(
           '$label ($count)',
           style: TextStyle(
-            color: isSelected ? Colors.blue : Colors.grey[700],
+            color: isSelected
+                ? const Color(0xFF5B9BD5)
+                : (isDark ? Colors.grey[400] : Colors.grey[700]),
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             fontSize: 13,
           ),
@@ -314,11 +326,14 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
     final studentName = question['users']?['name'] ?? 'Anonymous';
     final createdAt = DateTime.parse(question['created_at']);
     final timeAgo = _formatTimeAgo(createdAt);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: Theme.of(context).cardColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
+      elevation: isDark ? 0 : 2,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -339,15 +354,16 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
                     children: [
                       Text(
                         studentName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
+                          color: textColor,
                         ),
                       ),
                       Text(
                         timeAgo,
                         style: TextStyle(
-                          color: Colors.grey[600],
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
                           fontSize: 12,
                         ),
                       ),
