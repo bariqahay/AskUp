@@ -41,6 +41,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   // Realtime channels
   RealtimeChannel? _questionsChannel;
   RealtimeChannel? _pollsChannel;
+  RealtimeChannel? _pollVotesChannel;
 
   @override
   void initState() {
@@ -54,6 +55,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     _questionController.dispose();
     _questionsChannel?.unsubscribe();
     _pollsChannel?.unsubscribe();
+    _pollVotesChannel?.unsubscribe();
     super.dispose();
   }
 
@@ -129,6 +131,19 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             column: 'session_id',
             value: widget.sessionId,
           ),
+          callback: (payload) {
+            _loadData();
+          },
+        )
+        .subscribe();
+
+    // Subscribe to poll_votes changes for realtime vote updates
+    _pollVotesChannel = supabase
+        .channel('poll-votes-${widget.sessionId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'poll_votes',
           callback: (payload) {
             _loadData();
           },

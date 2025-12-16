@@ -130,7 +130,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   void _joinSession() async {
-    final code = _sessionCodeController.text.trim();
+    final code = _sessionCodeController.text.trim().toUpperCase();
     if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -179,6 +179,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       });
 
       if (mounted) {
+        // Clear input
+        _sessionCodeController.clear();
+        
         // Navigate to session detail
         Navigator.push(
           context,
@@ -200,7 +203,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           SnackBar(
             content: Text(e.toString().contains('duplicate') 
                 ? 'Already joined this session' 
-                : 'Error: $e'),
+                : 'Error joining session'),
             backgroundColor: Colors.red,
           ),
         );

@@ -30,12 +30,21 @@ class _CreatePollScreenState extends State<CreatePollScreen> with SingleTickerPr
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
+    // Add listeners to update preview in real-time
+    _questionController.addListener(() => setState(() {}));
+    _timeLimitController.addListener(() => setState(() {}));
+    for (var controller in _optionControllers) {
+      controller.addListener(() => setState(() {}));
+    }
   }
 
   void _addOption() {
     if (_optionControllers.length < 10) {
       setState(() {
-        _optionControllers.add(TextEditingController());
+        final newController = TextEditingController();
+        newController.addListener(() => setState(() {}));
+        _optionControllers.add(newController);
       });
     }
   }
