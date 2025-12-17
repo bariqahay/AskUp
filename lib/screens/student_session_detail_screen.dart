@@ -33,7 +33,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   // Data
   List<Map<String, dynamic>> _questions = [];
   List<Map<String, dynamic>> _polls = [];
-  Map<String, String> _selectedPollOptions = {}; // pollId -> optionId
+  Map<String, String> _selectedPollOptions = {};
   bool _isCheckedIn = false;
   String? _checkinTime;
   bool _isLoading = true;
@@ -62,21 +62,20 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      // Load questions with upvotes
+      // ✅ Load ALL questions except rejected ones
       final questions = await supabase
           .from('questions')
-          .select('*, users!questions_student_id_fkey(name)')
+          .select('*, users!questions_student_id_fkey(name), is_anonymous')
           .eq('session_id', widget.sessionId)
+          .neq('status', 'rejected')  // ✅ Hide rejected questions from students
           .order('upvotes_count', ascending: false);
 
-      // Load polls
       final polls = await supabase
           .from('polls')
           .select('*, poll_options(*)')
           .eq('session_id', widget.sessionId)
           .order('created_at', ascending: false);
 
-      // Check if student is checked in
       final checkIn = await supabase
           .from('session_participants')
           .select('joined_at')
@@ -101,7 +100,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   void _setupRealtime() {
-    // Subscribe to questions changes
     _questionsChannel = supabase
         .channel('questions-${widget.sessionId}')
         .onPostgresChanges(
@@ -113,13 +111,10 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             column: 'session_id',
             value: widget.sessionId,
           ),
-          callback: (payload) {
-            _loadData();
-          },
+          callback: (payload) => _loadData(),
         )
         .subscribe();
 
-    // Subscribe to polls changes
     _pollsChannel = supabase
         .channel('polls-${widget.sessionId}')
         .onPostgresChanges(
@@ -131,22 +126,17 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             column: 'session_id',
             value: widget.sessionId,
           ),
-          callback: (payload) {
-            _loadData();
-          },
+          callback: (payload) => _loadData(),
         )
         .subscribe();
 
-    // Subscribe to poll_votes changes for realtime vote updates
     _pollVotesChannel = supabase
         .channel('poll-votes-${widget.sessionId}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'poll_votes',
-          callback: (payload) {
-            _loadData();
-          },
+          callback: (payload) => _loadData(),
         )
         .subscribe();
   }
@@ -154,24 +144,19 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   Future<void> _toggleUpvote(String questionId, bool hasUpvoted) async {
     try {
       if (hasUpvoted) {
-        // Remove upvote
         await supabase
             .from('question_upvotes')
             .delete()
             .eq('question_id', questionId)
             .eq('student_id', widget.studentId);
-
         await supabase.rpc('decrement_upvote', params: {'question_id': questionId});
       } else {
-        // Add upvote
         await supabase.from('question_upvotes').insert({
           'question_id': questionId,
           'student_id': widget.studentId,
         });
-
         await supabase.rpc('increment_upvote', params: {'question_id': questionId});
       }
-
       _loadData();
     } catch (e) {
       debugPrint('Error toggling upvote: $e');
@@ -186,7 +171,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
           .eq('question_id', questionId)
           .eq('student_id', widget.studentId)
           .maybeSingle();
-
       return upvote != null;
     } catch (e) {
       return false;
@@ -239,10 +223,15 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
   }
 
   void _showAskQuestionDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dialogBg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF2D2D2D);
+    
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Dialog(
+          backgroundColor: dialogBg,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -255,16 +244,16 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Ask a Question',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF2D2D2D),
+                        color: textColor,
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, size: 20),
+                      icon: Icon(Icons.close, size: 20, color: textColor),
                       onPressed: () => Navigator.pop(context),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -272,27 +261,29 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                   ],
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Your Question',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF2D2D2D),
+                    color: textColor,
                   ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _questionController,
                   maxLines: 4,
+                  style: TextStyle(color: textColor),
                   decoration: InputDecoration(
                     hintText: 'Type your question here...',
+                    hintStyle: TextStyle(color: isDark ? Colors.grey[600] : Colors.grey[400]),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
+                      borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
+                      borderSide: BorderSide(color: isDark ? Colors.grey[700]! : Colors.grey[300]!),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -310,12 +301,9 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                       },
                       activeColor: const Color(0xFF5B9BD5),
                     ),
-                    const Text(
+                    Text(
                       'Ask anonymously',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF2D2D2D),
-                      ),
+                      style: TextStyle(fontSize: 14, color: textColor),
                     ),
                   ],
                 ),
@@ -376,13 +364,18 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = Theme.of(context).scaffoldBackgroundColor;
+    final cardColor = Theme.of(context).cardColor;
+    final textColor = Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black;
+    
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: cardColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D2D2D)),
+          icon: Icon(Icons.arrow_back, color: textColor),
           onPressed: () => Navigator.pop(context),
         ),
         title: Column(
@@ -390,17 +383,17 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
           children: [
             Text(
               widget.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF2D2D2D),
+                color: textColor,
               ),
             ),
             Text(
               '${widget.lecturer} • ${widget.code}',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
                 fontWeight: FontWeight.normal,
               ),
             ),
@@ -410,12 +403,12 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
       body: Column(
         children: [
           Container(
-            color: Colors.white,
+            color: cardColor,
             child: Row(
               children: [
-                _buildTab('Q&A', 0, Icons.question_answer_outlined),
-                _buildTab('Polls', 1, Icons.bar_chart),
-                _buildTab('Check-in', 2, Icons.how_to_reg_outlined),
+                _buildTab('Q&A', 0, Icons.question_answer_outlined, isDark, textColor),
+                _buildTab('Polls', 1, Icons.bar_chart, isDark, textColor),
+                _buildTab('Check-in', 2, Icons.how_to_reg_outlined, isDark, textColor),
               ],
             ),
           ),
@@ -423,10 +416,10 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _selectedTab == 0
-                    ? _buildQATab()
+                    ? _buildQATab(isDark, cardColor, textColor)
                     : _selectedTab == 1
-                        ? _buildPollsTab()
-                        : _buildCheckInTab(),
+                        ? _buildPollsTab(isDark, cardColor, textColor)
+                        : _buildCheckInTab(isDark, cardColor, textColor),
           ),
         ],
       ),
@@ -440,7 +433,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     );
   }
 
-  Widget _buildTab(String label, int index, IconData icon) {
+  Widget _buildTab(String label, int index, IconData icon, bool isDark, Color textColor) {
     final isSelected = _selectedTab == index;
     return Expanded(
       child: InkWell(
@@ -448,10 +441,10 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF5B9BD5) : Colors.white,
+            color: isSelected ? const Color(0xFF5B9BD5) : Colors.transparent,
             border: Border(
               bottom: BorderSide(
-                color: Colors.grey[200]!,
+                color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
                 width: 1,
               ),
             ),
@@ -462,7 +455,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
               Icon(
                 icon,
                 size: 18,
-                color: isSelected ? Colors.white : Colors.grey[600],
+                color: isSelected ? Colors.white : (isDark ? Colors.grey[400] : Colors.grey[600]),
               ),
               const SizedBox(width: 6),
               Text(
@@ -470,7 +463,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? Colors.white : Colors.grey[600],
+                  color: isSelected ? Colors.white : (isDark ? Colors.grey[400] : Colors.grey[600]),
                 ),
               ),
             ],
@@ -480,7 +473,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     );
   }
 
-  Widget _buildQATab() {
+  Widget _buildQATab(bool isDark, Color cardColor, Color textColor) {
     if (_questions.isEmpty) {
       return Center(
         child: Column(
@@ -494,18 +487,12 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             const SizedBox(height: 16),
             Text(
               'No questions yet',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
               'Be the first to ask!',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             ),
           ],
         ),
@@ -526,8 +513,11 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                 ? 'Anonymous'
                 : question['users']['name'],
             upvotesCount: question['upvotes_count'] ?? 0,
-            isAnswered: question['status'] == 'answered',
+            status: question['status'] ?? 'pending',  // ✅ Pass status string
             answer: question['answer'],
+            isDark: isDark,
+            cardColor: cardColor,
+            textColor: textColor,
           ),
         );
       },
@@ -539,9 +529,52 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     required String question,
     required String askedBy,
     required int upvotesCount,
-    required bool isAnswered,
+    required String status,  // ✅ Changed from bool isAnswered to String status
     String? answer,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
   }) {
+    // ✅ Determine badge color and text based on status
+    Color getBadgeColor() {
+      switch (status) {
+        case 'pending':
+          return isDark ? Colors.orange[900]! : Colors.orange[50]!;
+        case 'approved':
+          return isDark ? Colors.blue[900]! : Colors.blue[50]!;
+        case 'answered':
+          return isDark ? Colors.green[900]! : Colors.green[50]!;
+        default:
+          return isDark ? Colors.grey[800]! : Colors.grey[100]!;
+      }
+    }
+
+    Color getBadgeTextColor() {
+      switch (status) {
+        case 'pending':
+          return Colors.orange[400]!;
+        case 'approved':
+          return Colors.blue[400]!;
+        case 'answered':
+          return Colors.green[400]!;
+        default:
+          return Colors.grey[400]!;
+      }
+    }
+
+    String getBadgeText() {
+      switch (status) {
+        case 'pending':
+          return 'Pending';
+        case 'approved':
+          return 'Approved';
+        case 'answered':
+          return 'Answered';
+        default:
+          return status;
+      }
+    }
+
     return FutureBuilder<bool>(
       future: _checkIfUpvoted(questionId),
       builder: (context, snapshot) {
@@ -550,9 +583,9 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cardColor,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: [
+            boxShadow: isDark ? [] : [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 8,
@@ -567,20 +600,17 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isAnswered ? Colors.green[50] : Colors.orange[50],
+                      color: getBadgeColor(),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      isAnswered ? 'Answered' : 'Pending',
+                      getBadgeText(),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: isAnswered ? Colors.green[700] : Colors.orange[700],
+                        color: getBadgeTextColor(),
                       ),
                     ),
                   ),
@@ -593,13 +623,13 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Colors.grey[100],
+                      color: isDark ? Colors.grey[800] : Colors.grey[100],
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(
                       Icons.person,
                       size: 16,
-                      color: Colors.grey[600],
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -611,16 +641,16 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                           askedBy,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[700],
+                            color: isDark ? Colors.grey[400] : Colors.grey[700],
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           question,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
-                            color: Color(0xFF2D2D2D),
+                            color: textColor,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -630,26 +660,22 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                 ],
               ),
               const SizedBox(height: 12),
-              // Upvote button
               Material(
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: () => _toggleUpvote(questionId, hasUpvoted),
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: hasUpvoted
                           ? const Color(0xFF5B9BD5).withValues(alpha: 0.1)
-                          : Colors.grey[100],
+                          : (isDark ? Colors.grey[800] : Colors.grey[100]),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: hasUpvoted
                             ? const Color(0xFF5B9BD5)
-                            : Colors.grey[300]!,
+                            : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
                         width: 1,
                       ),
                     ),
@@ -661,7 +687,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                           size: 16,
                           color: hasUpvoted
                               ? const Color(0xFF5B9BD5)
-                              : Colors.grey[600],
+                              : (isDark ? Colors.grey[400] : Colors.grey[600]),
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -671,7 +697,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                             fontWeight: FontWeight.w600,
                             color: hasUpvoted
                                 ? const Color(0xFF5B9BD5)
-                                : Colors.grey[700],
+                                : (isDark ? Colors.grey[300] : Colors.grey[700]),
                           ),
                         ),
                       ],
@@ -679,12 +705,12 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                   ),
                 ),
               ),
-              if (isAnswered && answer != null) ...[
+              if (status == 'answered' && answer != null) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green[50],
+                    color: isDark ? Colors.green[900] : Colors.green[50],
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -693,7 +719,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                       Icon(
                         Icons.check_circle,
                         size: 16,
-                        color: Colors.green[700],
+                        color: Colors.green[400],
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -701,7 +727,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                           answer,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[800],
+                            color: isDark ? Colors.grey[300] : Colors.grey[800],
                           ),
                         ),
                       ),
@@ -716,33 +742,17 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     );
   }
 
-  Widget _buildPollsTab() {
+  Widget _buildPollsTab(bool isDark, Color cardColor, Color textColor) {
     if (_polls.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.bar_chart,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.bar_chart, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            Text(
-              'No polls yet',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            ),
+            Text('No polls yet', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
             const SizedBox(height: 8),
-            Text(
-              'Polls will appear here',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
-            ),
+            Text('Polls will appear here', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
           ],
         ),
       );
@@ -762,6 +772,9 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             pollId: pollId,
             question: poll['question'],
             options: options,
+            isDark: isDark,
+            cardColor: cardColor,
+            textColor: textColor,
           ),
         );
       },
@@ -772,15 +785,18 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     required String pollId,
     required String question,
     required List options,
+    required bool isDark,
+    required Color cardColor,
+    required Color textColor,
   }) {
     final selectedOptionId = _selectedPollOptions[pollId];
     
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        boxShadow: isDark ? [] : [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
@@ -794,12 +810,9 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.blue[50],
+                  color: isDark ? Colors.blue[900] : Colors.blue[50],
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
@@ -807,7 +820,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: Colors.blue[700],
+                    color: isDark ? Colors.blue[300] : Colors.blue[700],
                   ),
                 ),
               ),
@@ -816,10 +829,10 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
           const SizedBox(height: 12),
           Text(
             question,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF2D2D2D),
+              color: textColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -837,6 +850,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                 percentage: percentage,
                 votesCount: option['votes_count'] ?? 0,
                 isSelected: isSelected,
+                isDark: isDark,
                 onTap: () {
                   setState(() {
                     _selectedPollOptions[pollId] = optionId;
@@ -854,10 +868,8 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                   : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF5B9BD5),
-                disabledBackgroundColor: Colors.grey[300],
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                disabledBackgroundColor: isDark ? Colors.grey[800] : Colors.grey[300],
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 elevation: 0,
               ),
@@ -878,7 +890,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
 
   Future<void> _submitVote(String pollId, String optionId) async {
     try {
-      // Check if already voted
       final existingVote = await supabase
           .from('poll_votes')
           .select('id')
@@ -898,14 +909,12 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
         return;
       }
 
-      // Insert vote
       await supabase.from('poll_votes').insert({
         'poll_id': pollId,
         'option_id': optionId,
         'student_id': widget.studentId,
       });
 
-      // Increment votes count
       await supabase.rpc('increment_poll_votes', params: {
         'option_id': optionId,
       });
@@ -918,7 +927,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
           ),
         );
         
-        // Clear selection and reload
         setState(() {
           _selectedPollOptions.remove(pollId);
         });
@@ -942,6 +950,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     required double percentage,
     required int votesCount,
     required bool isSelected,
+    required bool isDark,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -949,10 +958,14 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF5B9BD5) : Colors.grey[100],
+          color: isSelected 
+              ? const Color(0xFF5B9BD5)
+              : (isDark ? Colors.grey[800] : Colors.grey[100]),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFF5B9BD5) : Colors.grey[300]!,
+            color: isSelected 
+                ? const Color(0xFF5B9BD5)
+                : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
             width: 1.5,
           ),
         ),
@@ -965,7 +978,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
               activeColor: Colors.white,
               fillColor: WidgetStateProperty.resolveWith((states) {
                 if (isSelected) return Colors.white;
-                return Colors.grey[400];
+                return isDark ? Colors.grey[600] : Colors.grey[400];
               }),
             ),
             const SizedBox(width: 8),
@@ -978,7 +991,9 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: isSelected ? Colors.white : const Color(0xFF2D2D2D),
+                      color: isSelected 
+                          ? Colors.white
+                          : (isDark ? Colors.grey[300] : const Color(0xFF2D2D2D)),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -991,7 +1006,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                             value: percentage,
                             backgroundColor: isSelected
                                 ? Colors.white.withValues(alpha: 0.3)
-                                : Colors.grey[300],
+                                : (isDark ? Colors.grey[700] : Colors.grey[300]),
                             valueColor: AlwaysStoppedAnimation<Color>(
                               isSelected ? Colors.white : const Color(0xFF5B9BD5),
                             ),
@@ -1005,7 +1020,9 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : Colors.grey[700],
+                          color: isSelected 
+                              ? Colors.white
+                              : (isDark ? Colors.grey[400] : Colors.grey[700]),
                         ),
                       ),
                     ],
@@ -1019,7 +1036,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
     );
   }
 
-  Widget _buildCheckInTab() {
+  Widget _buildCheckInTab(bool isDark, Color cardColor, Color textColor) {
     if (_isCheckedIn) {
       final checkinDateTime = _checkinTime != null
           ? DateTime.parse(_checkinTime!)
@@ -1035,22 +1052,22 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
               width: 120,
               height: 120,
               decoration: BoxDecoration(
-                color: Colors.green[50],
+                color: isDark ? Colors.green[900] : Colors.green[50],
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.check_circle,
                 size: 60,
-                color: Colors.green[600],
+                color: isDark ? Colors.green[400] : Colors.green[600],
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
+            Text(
               'Already Present',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF2D2D2D),
+                color: textColor,
               ),
             ),
             const SizedBox(height: 8),
@@ -1058,7 +1075,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
               'Checked in at $formattedTime',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
               ),
             ),
             const SizedBox(height: 24),
@@ -1066,14 +1083,14 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
               padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.symmetric(horizontal: 40),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
+                color: isDark ? Colors.blue[900] : Colors.blue[50],
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.lightbulb_outline,
-                    color: Colors.blue[700],
+                    color: isDark ? Colors.blue[300] : Colors.blue[700],
                     size: 20,
                   ),
                   const SizedBox(width: 12),
@@ -1082,7 +1099,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                       'Your attendance is automatically recorded',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey[700],
+                        color: isDark ? Colors.grey[300] : Colors.grey[700],
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -1095,7 +1112,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
               formattedDate,
               style: TextStyle(
                 fontSize: 13,
-                color: Colors.grey[600],
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1104,7 +1121,6 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
       );
     }
 
-    // Not checked in yet
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1113,22 +1129,22 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              color: Colors.orange[50],
+              color: isDark ? Colors.orange[900] : Colors.orange[50],
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.qr_code_scanner,
               size: 60,
-              color: Colors.orange[600],
+              color: isDark ? Colors.orange[400] : Colors.orange[600],
             ),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Not Checked In',
             style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF2D2D2D),
+              color: textColor,
             ),
           ),
           const SizedBox(height: 8),
@@ -1136,7 +1152,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             'Scan the QR code to check in',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[600],
+              color: isDark ? Colors.grey[400] : Colors.grey[600],
             ),
           ),
           const SizedBox(height: 24),
@@ -1144,14 +1160,14 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
             padding: const EdgeInsets.all(16),
             margin: const EdgeInsets.symmetric(horizontal: 40),
             decoration: BoxDecoration(
-              color: Colors.orange[50],
+              color: isDark ? Colors.orange[900] : Colors.orange[50],
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
                 Icon(
                   Icons.info_outline,
-                  color: Colors.orange[700],
+                  color: isDark ? Colors.orange[300] : Colors.orange[700],
                   size: 20,
                 ),
                 const SizedBox(width: 12),
@@ -1160,7 +1176,7 @@ class _StudentSessionDetailScreenState extends State<StudentSessionDetailScreen>
                     'You were added to this session but haven\'t checked in yet',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[700],
+                      color: isDark ? Colors.grey[300] : Colors.grey[700],
                     ),
                     textAlign: TextAlign.center,
                   ),

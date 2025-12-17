@@ -48,32 +48,34 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
   }
 
   Future<void> _loadQuestions() async {
-    try {
-      final response = await _supabase
-          .from('questions')
-          .select('''
-            id,
-            content,
-            created_at,
-            status,
-            answer,
-            answered_at,
-            student_id,
-            users!questions_student_id_fkey(name)
-          ''')
-          .eq('session_id', widget.sessionId)
-          .order('created_at', ascending: false);
+      try {
+        final response = await _supabase
+            .from('questions')
+            .select('''
+              id,
+              content,
+              created_at,
+              status,
+              answer,
+              answered_at,
+              student_id,
+              is_anonymous,
+              upvotes_count,
+              users!questions_student_id_fkey(name)
+            ''')
+            .eq('session_id', widget.sessionId)
+            .order('created_at', ascending: false);
 
-      setState(() {
-        _questions = List<Map<String, dynamic>>.from(response);
-        _filterQuestions();
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('Error loading questions: $e');
-      setState(() => _isLoading = false);
+        setState(() {
+          _questions = List<Map<String, dynamic>>.from(response);
+          _filterQuestions();
+          _isLoading = false;
+        });
+      } catch (e) {
+        print('Error loading questions: $e');
+        setState(() => _isLoading = false);
+      }
     }
-  }
 
   void _filterQuestions() {
     setState(() {
@@ -323,7 +325,11 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
     final questionId = question['id'];
     final isExpanded = _expandedQuestionId == questionId;
     final status = question['status'] ?? 'pending';
-    final studentName = question['users']?['name'] ?? 'Anonymous';
+    
+    // ✅ Check is_anonymous flag
+    final isAnonymous = question['is_anonymous'] == true;
+    final studentName = isAnonymous ? 'Anonymous' : (question['users']?['name'] ?? 'Anonymous');
+    
     final createdAt = DateTime.parse(question['created_at']);
     final timeAgo = _formatTimeAgo(createdAt);
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -343,22 +349,43 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: Colors.orange[100],
+                  backgroundColor: isAnonymous 
+                      ? (isDark ? Colors.grey[800] : Colors.grey[300])
+                      : (isDark ? Colors.orange[900] : Colors.orange[100]),
                   radius: 16,
-                  child: const Icon(Icons.person, size: 18, color: Colors.orange),
+                  child: Icon(
+                    isAnonymous ? Icons.person_off : Icons.person, 
+                    size: 18, 
+                    color: isAnonymous 
+                        ? (isDark ? Colors.grey[400] : Colors.grey[600])
+                        : Colors.orange,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        studentName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: textColor,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            studentName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: textColor,
+                              fontStyle: isAnonymous ? FontStyle.italic : FontStyle.normal,
+                            ),
+                          ),
+                          if (isAnonymous) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.lock,
+                              size: 12,
+                              color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            ),
+                          ],
+                        ],
                       ),
                       Text(
                         timeAgo,
@@ -393,8 +420,35 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
             // Question Content
             Text(
               question['content'],
-              style: const TextStyle(fontSize: 14, height: 1.5),
+              style: TextStyle(
+                fontSize: 14, 
+                height: 1.5,
+                color: textColor,
+              ),
             ),
+
+            // Upvotes Count
+            if (question['upvotes_count'] != null && question['upvotes_count'] > 0) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.arrow_upward,
+                    size: 14,
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${question['upvotes_count']} upvote${question['upvotes_count'] > 1 ? 's' : ''}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
 
             // Answer Section (if answered)
             if (question['answer'] != null) ...[
@@ -402,23 +456,29 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.green[50],
+                  color: isDark ? Colors.green[900]?.withOpacity(0.3) : Colors.green[50],
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green[200]!),
+                  border: Border.all(
+                    color: isDark ? Colors.green[700]! : Colors.green[200]!,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.check_circle, size: 16, color: Colors.green[700]),
+                        Icon(
+                          Icons.check_circle, 
+                          size: 16, 
+                          color: isDark ? Colors.green[400] : Colors.green[700],
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           'Your Answer:',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
-                            color: Colors.green[700],
+                            color: isDark ? Colors.green[400] : Colors.green[700],
                           ),
                         ),
                       ],
@@ -426,7 +486,11 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
                     const SizedBox(height: 8),
                     Text(
                       question['answer'],
-                      style: const TextStyle(fontSize: 13, height: 1.5),
+                      style: TextStyle(
+                        fontSize: 13, 
+                        height: 1.5,
+                        color: textColor,
+                      ),
                     ),
                   ],
                 ),
@@ -496,13 +560,15 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
               TextField(
                 controller: _answerController,
                 maxLines: 4,
+                style: TextStyle(color: textColor),
                 decoration: InputDecoration(
                   hintText: 'Type your answer here...',
+                  hintStyle: TextStyle(color: isDark ? Colors.grey[600] : Colors.grey[400]),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
                 ),
               ),
               const SizedBox(height: 8),
@@ -517,7 +583,10 @@ class _QAManagementScreenState extends State<QAManagementScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text('SEND REPLY', style: TextStyle(fontSize: 13)),
+                  child: const Text(
+                    'SEND REPLY', 
+                    style: TextStyle(fontSize: 13, color: Colors.white),
+                  ),
                 ),
               ),
             ],

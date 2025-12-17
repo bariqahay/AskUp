@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'dashboard_screen.dart';
 import 'create_poll_screen.dart';
 import 'qa_management_screen.dart';
+import 'lecturer_poll_results_screen.dart';
 
 class SessionDetailScreen extends StatefulWidget {
   final String sessionId;
@@ -497,7 +498,29 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                     cardColor: cardColor,
                   ),
 
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
+
+                  _actionButton(
+                  title: 'VIEW POLL RESULTS',
+                  subtitle: 'Monitor live voting results',
+                  icon: Icons.bar_chart,
+                  color: Colors.purple,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LecturerPollResultsScreen(
+                          sessionId: widget.sessionId,
+                          sessionTitle: widget.title,
+                        ),
+                      ),
+                    );
+                  },
+                  isDark: isDark,
+                  cardColor: cardColor,
+                ),
+
+                const SizedBox(height: 20),
 
                   /// Session Status Card
                   Container(

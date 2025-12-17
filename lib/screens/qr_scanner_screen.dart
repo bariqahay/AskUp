@@ -5,12 +5,12 @@ import 'student_session_detail_screen.dart';
 
 class QRScannerScreen extends StatefulWidget {
   final String studentId;
-  final String studentName; // Add this parameter
+  final String studentName;
 
   const QRScannerScreen({
     super.key,
     required this.studentId,
-    required this.studentName, // Add this parameter
+    required this.studentName,
   });
 
   @override
@@ -19,8 +19,9 @@ class QRScannerScreen extends StatefulWidget {
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
   final supabase = Supabase.instance.client;
-  MobileScannerController cameraController = MobileScannerController();
-  bool isProcessing = false;
+  final MobileScannerController cameraController = MobileScannerController();
+
+  bool _locked = false; // 🔒 LOGIC LOCK (NOT UI STATE)
 
   @override
   void dispose() {
@@ -28,73 +29,92 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     super.dispose();
   }
 
-  Future<void> _processQRCode(String? code) async {
-    if (code == null || isProcessing) return;
+    // ================= CORE LOGIC =================
 
-    setState(() => isProcessing = true);
+  Future<void> _processQRCode(String? rawCode) async {
+    if (_locked) return;
+    if (rawCode == null || rawCode.trim().isEmpty) return;
+
+    _locked = true;
+    cameraController.stop();
 
     try {
-      // Format QR: "askup://session/{session_id}" atau langsung session_id
-      String sessionId = code;
-      if (code.startsWith('askup://session/')) {
-        sessionId = code.replaceFirst('askup://session/', '');
+      String sessionId = rawCode.trim();
+      if (sessionId.startsWith('askup://session/')) {
+        sessionId = sessionId.replaceFirst('askup://session/', '');
       }
 
-      // Cek apakah session valid
-      final sessionData = await supabase
+      if (sessionId.isEmpty) {
+        _fail('Invalid QR code');
+        return;
+      }
+
+      final session = await supabase
           .from('sessions')
-          .select('id, title, class_id, session_code, classes!inner(title, code, lecturer_id)')
+          .select(
+            'id, title, status, classes!inner(title, code)',
+          )
           .eq('id', sessionId)
           .eq('status', 'active')
           .maybeSingle();
 
-      if (sessionData == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Session not found or inactive'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        setState(() => isProcessing = false);
+      if (session == null) {
+        _fail('Session not found or inactive');
         return;
       }
 
-      // Check-in student ke session (join session)
       await supabase.from('session_participants').insert({
-        'session_id': sessionId,
+        'session_id': session['id'],
         'student_id': widget.studentId,
       });
 
-      if (mounted) {
-        // Navigate ke session detail
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => StudentSessionDetailScreen(
-              title: sessionData['title'],
-              lecturer: sessionData['classes']['title'],
-              code: sessionData['classes']['code'],
-              sessionId: sessionId,
-              studentId: widget.studentId,
-              studentName: widget.studentName, // Pass the student name
-            ),
+      if (!mounted) return;
+
+      // ✅ JANGAN POP DULU, langsung push Session Detail
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StudentSessionDetailScreen(
+            sessionId: session['id'],
+            title: session['title'],
+            lecturer: session['classes']['title'],
+            code: session['classes']['code'],
+            studentId: widget.studentId,
+            studentName: widget.studentName,
           ),
-        );
+        ),
+      );
+
+      // ✅ Pas balik dari Session Detail, baru pop QR Scanner dengan true
+      if (mounted) {
+        Navigator.pop(context, true);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString().contains('duplicate') ? 'Already joined this session' : e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      setState(() => isProcessing = false);
+      final msg = e.toString().contains('duplicate')
+          ? 'You already joined this session'
+          : 'Failed to join session';
+
+      _fail(msg);
     }
   }
+
+  // ================= ERROR HANDLER =================
+
+  void _fail(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+
+    _locked = false;
+    cameraController.start(); // 🔄 RESUME CAMERA
+  }
+
+  // ================= UI =================
 
   @override
   Widget build(BuildContext context) {
@@ -110,15 +130,16 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         title: const Text(
           'Scan QR Code',
           style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
             color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
         ),
         actions: [
           IconButton(
             icon: Icon(
-              cameraController.torchEnabled ? Icons.flash_on : Icons.flash_off,
+              cameraController.torchEnabled
+                  ? Icons.flash_on
+                  : Icons.flash_off,
               color: Colors.white,
             ),
             onPressed: () => cameraController.toggleTorch(),
@@ -130,53 +151,46 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           MobileScanner(
             controller: cameraController,
             onDetect: (capture) {
-              final List<Barcode> barcodes = capture.barcodes;
-              for (final barcode in barcodes) {
+              for (final barcode in capture.barcodes) {
                 _processQRCode(barcode.rawValue);
               }
             },
           ),
-          // Overlay with scanning area
           CustomPaint(
             painter: ScannerOverlay(),
             child: Container(),
           ),
-          // Instructions
           Positioned(
             bottom: 100,
             left: 0,
             right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'Position the QR code within the frame',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      textAlign: TextAlign.center,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'Position the QR code inside the frame',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
                     ),
                   ),
-                  if (isProcessing) ...[
-                    const SizedBox(height: 16),
-                    const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  ],
+                ),
+                if (_locked) ...[
+                  const SizedBox(height: 16),
+                  const CircularProgressIndicator(
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
         ],
@@ -185,76 +199,43 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   }
 }
 
+// ================= OVERLAY =================
+
 class ScannerOverlay extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final double scanAreaSize = size.width * 0.7;
-    final double left = (size.width - scanAreaSize) / 2;
-    final double top = (size.height - scanAreaSize) / 2;
+    final scanSize = size.width * 0.7;
+    final left = (size.width - scanSize) / 2;
+    final top = (size.height - scanSize) / 2;
 
-    // Create path for overlay with hole
-    final Path overlayPath = Path()
+    final overlay = Path()
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
-    
-    final Path scanAreaPath = Path()
+
+    final hole = Path()
       ..addRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(left, top, scanAreaSize, scanAreaSize),
+        Rect.fromLTWH(left, top, scanSize, scanSize),
         const Radius.circular(16),
       ));
 
-    // Subtract scan area from overlay
-    final Path finalPath = Path.combine(
-      PathOperation.difference,
-      overlayPath,
-      scanAreaPath,
+    final path = Path.combine(PathOperation.difference, overlay, hole);
+
+    canvas.drawPath(
+      path,
+      Paint()..color = Colors.black.withValues(alpha: 0.6),
     );
-
-    // Dark overlay with transparent center
-    final Paint overlayPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.6);
-
-    canvas.drawPath(finalPath, overlayPaint);
-
-    // Border
-    final Paint borderPaint = Paint()
-      ..color = const Color(0xFF5B9BD5)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(left, top, scanAreaSize, scanAreaSize),
+        Rect.fromLTWH(left, top, scanSize, scanSize),
         const Radius.circular(16),
       ),
-      borderPaint,
+      Paint()
+        ..color = const Color(0xFF5B9BD5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
     );
-
-    // Corner lines
-    final Paint cornerPaint = Paint()
-      ..color = const Color(0xFF5B9BD5)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round;
-
-    const double cornerLength = 30;
-
-    // Top-left
-    canvas.drawLine(Offset(left, top), Offset(left + cornerLength, top), cornerPaint);
-    canvas.drawLine(Offset(left, top), Offset(left, top + cornerLength), cornerPaint);
-
-    // Top-right
-    canvas.drawLine(Offset(left + scanAreaSize, top), Offset(left + scanAreaSize - cornerLength, top), cornerPaint);
-    canvas.drawLine(Offset(left + scanAreaSize, top), Offset(left + scanAreaSize, top + cornerLength), cornerPaint);
-
-    // Bottom-left
-    canvas.drawLine(Offset(left, top + scanAreaSize), Offset(left + cornerLength, top + scanAreaSize), cornerPaint);
-    canvas.drawLine(Offset(left, top + scanAreaSize), Offset(left, top + scanAreaSize - cornerLength), cornerPaint);
-
-    // Bottom-right
-    canvas.drawLine(Offset(left + scanAreaSize, top + scanAreaSize), Offset(left + scanAreaSize - cornerLength, top + scanAreaSize), cornerPaint);
-    canvas.drawLine(Offset(left + scanAreaSize, top + scanAreaSize), Offset(left + scanAreaSize, top + scanAreaSize - cornerLength), cornerPaint);
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
+  bool shouldRepaint(_) => false;
 }

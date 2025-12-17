@@ -37,138 +37,198 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _loadDashboardData() async {
-    if (widget.studentId == null) {
-      setState(() => _isLoading = false);
-      return;
+void _showError(String message) {
+  if (!mounted) return;
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: Colors.red,
+    ),
+  );
+}
+
+Future<void> _loadDashboardData() async {
+  if (widget.studentId == null) {
+    setState(() => _isLoading = false);
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    // Load student name
+    final userData = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', widget.studentId!)
+        .maybeSingle();
+
+    if (userData != null) {
+      _studentName = userData['name'] ?? 'Student';
     }
 
-    setState(() => _isLoading = true);
-    
-    try {
-      // Load student name
-      final userData = await supabase
-          .from('users')
-          .select('name')
-          .eq('id', widget.studentId!)
-          .maybeSingle();
+    // 🔥 LOAD JOINED SESSIONS - Filter active di client untuk debug lebih mudah
+    final participants = await supabase
+        .from('session_participants')
+        .select(
+          'session_id, sessions!inner(id, title, session_code, status, class_id, classes!inner(title, code))',
+        )
+        .eq('student_id', widget.studentId!);
+
+    debugPrint('📊 Raw participants data: ${participants.length} sessions found');
+
+    final List<Map<String, dynamic>> activeSessions = [];
+
+    for (final p in participants) {
+      final session = p['sessions'];
       
-      if (userData != null) {
-        _studentName = userData['name'] ?? 'Student';
+      // ✅ Debug log untuk lihat struktur data
+      debugPrint('Session data: $session');
+      
+      // ✅ Null safety check
+      if (session == null) {
+        debugPrint('⚠️ Session is null for participant');
+        continue;
       }
 
-      // Load active sessions that student has joined
-      final sessions = await supabase
-          .from('session_participants')
-          .select('session_id, sessions!inner(id, title, session_code, status, classes!inner(title, code))')
-          .eq('student_id', widget.studentId!)
-          .eq('sessions.status', 'active');
-
-      // Count new questions per session
-      final List<Map<String, dynamic>> sessionsList = [];
-      for (var participant in sessions) {
-        final session = participant['sessions'];
-        final sessionId = session['id'];
-        
-        // Count unanswered questions
-        final questions = await supabase
-            .from('questions')
-            .select('id')
-            .eq('session_id', sessionId)
-            .eq('status', 'pending');
-        
-        // Check if has active polls
-        final polls = await supabase
-            .from('polls')
-            .select('id')
-            .eq('session_id', sessionId);
-        
-        sessionsList.add({
-          'id': sessionId,
-          'title': session['title'],
-          'session_code': session['session_code'],
-          'class_title': session['classes']['title'],
-          'class_code': session['classes']['code'],
-          'new_questions': questions.length,
-          'has_active_poll': polls.isNotEmpty,
-        });
+      // ✅ Filter active sessions di client
+      final sessionStatus = session['status'] as String?;
+      if (sessionStatus != 'active') {
+        debugPrint('⏭️ Skipping session ${session['id']} - status: $sessionStatus');
+        continue;
       }
 
-      // Load student stats
-      final questionsCount = await supabase
+      final sessionId = session['id'] as String;
+      final sessionTitle = session['title'] as String? ?? 'Untitled Session';
+      final sessionCode = session['session_code'] as String? ?? 'N/A';
+
+      // ✅ Safe access to nested classes data
+      final classData = session['classes'];
+      String classTitle = 'Unknown Class';
+      String classCode = 'N/A';
+      
+      if (classData != null && classData is Map) {
+        classTitle = classData['title'] as String? ?? 'Unknown Class';
+        classCode = classData['code'] as String? ?? 'N/A';
+      }
+
+      // ✅ Count pending questions
+      final questions = await supabase
           .from('questions')
           .select('id')
-          .eq('student_id', widget.studentId!);
+          .eq('session_id', sessionId)
+          .eq('status', 'pending');
 
-      // Calculate attendance percentage
-      final totalSessions = await supabase
-          .from('session_participants')
-          .select('id')
-          .eq('student_id', widget.studentId!);
+      debugPrint('❓ Questions for session $sessionId: ${questions.length}');
 
-      // Get total sessions available
-      final allSessions = await supabase
-          .from('sessions')
-          .select('id')
-          .neq('status', 'draft');
+      // ✅ Check for polls (tanpa status karena kolom tidak ada)
+      // Asumsi: poll dianggap active jika belum ada tanggal expired
+      final allPolls = await supabase
+          .from('polls')
+          .select('id, created_at, time_limit_minutes')
+          .eq('session_id', sessionId);
 
-      final attendancePercent = allSessions.length > 0
-          ? ((totalSessions.length / allSessions.length) * 100).round()
-          : 0;
+      debugPrint('📊 All polls for session $sessionId: ${allPolls.length} found');
 
-      setState(() {
-        _activeSessions = sessionsList;
-        _questionsCount = questionsCount.length;
-        _pollsCount = 0; // TODO: Implement when poll_votes exists
-        _attendancePercentage = attendancePercent;
-        _isLoading = false;
+      // ✅ Filter active polls berdasarkan time limit
+      final now = DateTime.now();
+      final activePolls = allPolls.where((poll) {
+        final timeLimitMinutes = poll['time_limit_minutes'] as int?;
+        
+        // Jika tidak ada time limit, poll selalu active
+        if (timeLimitMinutes == null || timeLimitMinutes == 0) {
+          return true;
+        }
+        
+        // Check apakah poll masih dalam time limit
+        final createdAt = DateTime.parse(poll['created_at'] as String);
+        final expiresAt = createdAt.add(Duration(minutes: timeLimitMinutes));
+        
+        return now.isBefore(expiresAt);
+      }).toList();
+
+      debugPrint('✅ Active polls (within time limit): ${activePolls.length}');
+
+      activeSessions.add({
+        'id': sessionId,
+        'title': sessionTitle,
+        'session_code': sessionCode,
+        'class_title': classTitle,
+        'class_code': classCode,
+        'new_questions': questions.length,
+        'has_active_poll': activePolls.isNotEmpty,
       });
-    } catch (e) {
-      debugPrint('Error loading dashboard data: $e');
-      setState(() => _isLoading = false);
     }
+
+    debugPrint('✅ Final active sessions: ${activeSessions.length}');
+
+    // Stats
+    final questionsCount = await supabase
+        .from('questions')
+        .select('id')
+        .eq('student_id', widget.studentId!);
+
+    // ✅ Hitung total sessions (semua sessions)
+    // Atau filter yang active/completed saja jika mau
+    final allSessions = await supabase
+        .from('sessions')
+        .select('id');
+        // Bisa juga pakai: .in_('status', ['active', 'completed'])
+
+    debugPrint('📈 Total sessions: ${allSessions.length}');
+    debugPrint('📈 Student joined: ${participants.length}');
+
+    final attendancePercent = allSessions.isNotEmpty
+        ? ((participants.length / allSessions.length) * 100).round()
+        : 0;
+
+    // ✅ Hitung polls yang sudah dijawab student ini
+    final pollsAnswered = await supabase
+        .from('poll_votes')
+        .select('id')
+        .eq('student_id', widget.studentId!);
+
+    setState(() {
+      _activeSessions = activeSessions;
+      _questionsCount = questionsCount.length;
+      _pollsCount = pollsAnswered.length;
+      _attendancePercentage = attendancePercent;
+      _isLoading = false;
+    });
+
+    debugPrint('🎉 Dashboard loaded successfully!');
+  } catch (e, stackTrace) {
+    debugPrint('❌ Dashboard error: $e');
+    debugPrint('Stack trace: $stackTrace');
+    setState(() => _isLoading = false);
   }
+}
+
 
   void _joinSession() async {
     final code = _sessionCodeController.text.trim().toUpperCase();
     if (code.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a session code'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('Please enter a session code');
       return;
     }
 
     if (widget.studentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Student ID not found'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('Student ID not found');
       return;
     }
 
     try {
-      // Query session by code
+      // Query session by SESSION CODE
       final session = await supabase
-          .from('sessions')
-          .select('id, title, session_code, status, classes!inner(title, code)')
-          .eq('session_code', code)
-          .eq('status', 'active')
-          .maybeSingle();
+        .from('sessions')
+        .select('id, title, session_code, status, classes!inner(title, code)')
+        .eq('session_code', code)
+        .eq('status', 'active')
+        .maybeSingle();
 
       if (session == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Session not found or inactive'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        _showError('Session not found or not active');
         return;
       }
 
@@ -182,8 +242,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         // Clear input
         _sessionCodeController.clear();
         
-        // Navigate to session detail
-        Navigator.push(
+        // ✅ Navigate to session detail dengan await
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => StudentSessionDetailScreen(
@@ -195,51 +255,50 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
               studentName: _studentName,
             ),
           ),
-        ).then((_) => _loadDashboardData());
+        );
+
+        // ✅ Pas balik dari Session Detail, refresh dashboard
+        _loadDashboardData();
       }
     } catch (e) {
+      debugPrint('Join session error: $e');
       if (mounted) {
+        _showError(e.toString().contains('duplicate') 
+            ? 'Already joined this session' 
+            : 'Error joining session');
+      }
+    }
+  }
+
+    void _scanQRCode() {
+      if (widget.studentId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().contains('duplicate') 
-                ? 'Already joined this session' 
-                : 'Error joining session'),
+          const SnackBar(
+            content: Text('Student ID not found'),
             backgroundColor: Colors.red,
           ),
         );
+        return;
       }
-    }
-  }
 
-  void _scanQRCode() {
-    if (widget.studentId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Student ID not found'),
-          backgroundColor: Colors.red,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => QRScannerScreen(
+            studentId: widget.studentId!,
+            studentName: _studentName,
+          ),
         ),
-      );
-      return;
+      ).then((_) => _loadDashboardData());
     }
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => QRScannerScreen(
-          studentId: widget.studentId!,
-          studentName: _studentName,
-        ),
-      ),
-    );
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    String _getInitials(String name) {
+      final parts = name.trim().split(' ');
+      if (parts.length >= 2) {
+        return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+      }
+      return parts[0].substring(0, 2).toUpperCase();
     }
-    return parts[0].substring(0, 2).toUpperCase();
-  }
 
   @override
   Widget build(BuildContext context) {

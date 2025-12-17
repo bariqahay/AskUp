@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'student_dashboard_screen.dart';
+import 'forgot_password_screen.dart';
 
 class StudentLoginScreen extends StatefulWidget {
   const StudentLoginScreen({super.key});
@@ -257,8 +258,12 @@ class _StudentLoginScreenState extends State<StudentLoginScreen> {
                         ),
                         TextButton(
                           onPressed: () {
-                            // TODO: Navigate to forgot password screen
-                            _showSnackBar('Forgot password feature coming soon');
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ForgotPasswordScreen(),
+                              ),
+                            );
                           },
                           child: const Text(
                             'Forgot Password?',

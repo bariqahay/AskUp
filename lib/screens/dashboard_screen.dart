@@ -905,7 +905,10 @@ class _CreateSessionDialogState extends State<_CreateSessionDialog> {
                             )
                           : const Text(
                               'CREATE SESSION',
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                ),
                             ),
                     ),
                   ),

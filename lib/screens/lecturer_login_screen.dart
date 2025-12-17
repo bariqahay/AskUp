@@ -18,6 +18,8 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
 
   bool rememberMe = false;
   bool isLoading = false;
+  bool _obscurePassword = true; // 🔑 penting
+
   final supabase = Supabase.instance.client;
 
   @override
@@ -26,7 +28,7 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
     _loadRememberMe();
   }
 
-  void _loadRememberMe() async {
+  Future<void> _loadRememberMe() async {
     final prefs = await SharedPreferences.getInstance();
     final savedEmail = prefs.getString('saved_email');
     final savedPassword = prefs.getString('saved_password');
@@ -60,7 +62,6 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
     setState(() => isLoading = true);
 
     try {
-      // Panggil RPC (return langsung Map, bukan .data)
       final response = await supabase.rpc(
         'login_lecturer',
         params: {
@@ -69,43 +70,21 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
         },
       );
 
-      // langsung pake response (NO .data)
-      final userData = response;
-
-      if (userData == null) {
-        _showSnackBar("Login failed: no response from server");
+      if (response is Map && response['error'] != null) {
+        final err = response['error'];
+        _showSnackBar(
+          err == 'email_not_found'
+              ? 'Email not registered'
+              : err == 'invalid_password'
+                  ? 'Invalid password'
+                  : 'Login failed',
+        );
         return;
       }
 
-      // Handle error dari RPC (kalau return Map error)
-      if (userData is Map && userData['error'] != null) {
-        final err = userData['error'].toString();
-        if (err == 'email_not_found') {
-          _showSnackBar("Email not registered");
-        } else if (err == 'invalid_password') {
-          _showSnackBar("Invalid password");
-        } else {
-          _showSnackBar("Login error: $err");
-        }
-        return;
-      }
+      final lecturerId = response['id'];
+      final lecturerName = response['name'] ?? 'Lecturer';
 
-      // Ambil id + nama dari response RPC (valid login)
-      String lecturerId = '';
-      String lecturerName = 'Lecturer';
-
-      if (userData is Map) {
-        lecturerId = userData['id']?.toString() ?? '';
-        lecturerName = userData['name']?.toString()
-            ?? userData['full_name']?.toString()
-            ?? userData['username']?.toString()
-            ?? 'Lecturer';
-      } else {
-        _showSnackBar("Unexpected response format");
-        return;
-      }
-
-      // Save shared prefs (remember + lecturer info)
       final prefs = await SharedPreferences.getInstance();
 
       if (rememberMe) {
@@ -119,7 +98,8 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
       await prefs.setString('lecturer_id', lecturerId);
       await prefs.setString('lecturer_name', lecturerName);
 
-      // Navigate ke Dashboard
+      if (!mounted) return;
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -130,38 +110,39 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
         ),
       );
     } catch (e) {
-      _showSnackBar("Unexpected error: $e");
+      _showSnackBar("Unexpected error");
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-
   void _showSnackBar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(msg)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final bgColor = isDark ? const Color(0xFF1E1E1E) : Colors.grey[50];
+    final textColor = isDark ? Colors.white : const Color(0xFF2D2D2D);
+    final cardColor = isDark ? const Color(0xFF2D2D2D) : Colors.white;
+    final hintColor = isDark ? Colors.grey[500] : Colors.grey[400];
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: bgColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Center(
+        child: Center(
+          child: SingleChildScrollView(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 450),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                padding: const EdgeInsets.all(24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 60),
+                    const SizedBox(height: 40),
                     Container(
                       width: 110,
                       height: 110,
@@ -169,39 +150,60 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                         color: const Color(0xFF5B9BD5),
                         borderRadius: BorderRadius.circular(28),
                       ),
-                      child: const Icon(Icons.person, color: Colors.white, size: 50),
+                      child: const Icon(Icons.person, color: Colors.white, size: 48),
                     ),
                     const SizedBox(height: 24),
-                    const Text(
-                      'Lecturer Login',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2D2D2D)),
-                    ),
-                    const SizedBox(height: 8),
                     Text(
-                      'Manage your classroom sessions',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      'Lecturer Login',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 32),
+
+                    /// EMAIL
                     _buildInputField(
-                      'Email Address',
-                      false,
-                      _emailController,
-                      (value) => _passwordFocus.requestFocus(),
+                      controller: _emailController,
+                      label: 'Email',
+                      hint: 'lecturer@university.ac.id',
+                      icon: Icons.email_outlined,
+                      obscure: false,
+                      textColor: textColor,
+                      cardColor: cardColor,
+                      hintColor: hintColor,
+                      onSubmitted: (_) => _passwordFocus.requestFocus(),
                     ),
                     const SizedBox(height: 20),
+
+                    /// PASSWORD
                     _buildInputField(
-                      'Password',
-                      true,
-                      _passwordController,
-                      null,
+                      controller: _passwordController,
+                      label: 'Password',
+                      hint: 'Enter your password',
+                      icon: Icons.lock_outline,
+                      obscure: _obscurePassword,
+                      textColor: textColor,
+                      cardColor: cardColor,
+                      hintColor: hintColor,
                       focusNode: _passwordFocus,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
                     ),
+
                     const SizedBox(height: 12),
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -209,18 +211,10 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                           children: [
                             Checkbox(
                               value: rememberMe,
-                              activeColor: const Color(0xFF5B9BD5),
-                              onChanged: (value) =>
-                                  setState(() => rememberMe = value ?? false),
+                              onChanged: (v) =>
+                                  setState(() => rememberMe = v ?? false),
                             ),
-                            const Text(
-                              'Remember me',
-                              style: TextStyle(
-                                color: Color(0xFF2D2D2D),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                            Text('Remember me', style: TextStyle(color: textColor)),
                           ],
                         ),
                         TextButton(
@@ -228,22 +222,20 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const ForgotPasswordScreen(),
+                                builder: (_) => const ForgotPasswordScreen(),
                               ),
                             );
                           },
                           child: const Text(
                             'Forgot Password?',
-                            style: TextStyle(
-                              color: Color(0xFF5B9BD5),
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                            ),
+                            style: TextStyle(color: Color(0xFF5B9BD5)),
                           ),
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 28),
+
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -253,32 +245,20 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
                           backgroundColor: const Color(0xFF5B9BD5),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                          elevation: 2,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         child: isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
+                            ? const CircularProgressIndicator(color: Colors.white)
                             : const Text(
                                 'SIGN IN',
                                 style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.0,
-                                    color: Colors.white),
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
                               ),
                       ),
                     ),
-                    const SizedBox(height: 40),
-                    Text(
-                      "By signing in, you agree to the University's Terms of Service",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -289,46 +269,40 @@ class _LecturerLoginScreenState extends State<LecturerLoginScreen> {
     );
   }
 
-  Widget _buildInputField(String label, bool obscure,
-      TextEditingController controller, Function(String)? onSubmitted,
-      {FocusNode? focusNode}) {
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    required bool obscure,
+    required Color textColor,
+    required Color cardColor,
+    required Color? hintColor,
+    FocusNode? focusNode,
+    Widget? suffixIcon,
+    Function(String)? onSubmitted,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2D2D2D))),
+            style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
           obscureText: obscure,
           focusNode: focusNode,
           onSubmitted: onSubmitted,
-          style: const TextStyle(color: Color(0xFF2D2D2D)),
+          style: TextStyle(color: textColor),
           decoration: InputDecoration(
-            hintText: obscure ? 'Enter your password' : 'Enter your email',
-            hintStyle: TextStyle(color: Colors.grey[400]),
-            prefixIcon: Icon(
-              obscure ? Icons.lock_outline : Icons.email_outlined,
-              color: const Color(0xFF5B9BD5),
-            ),
-            contentPadding:
-                const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+            prefixIcon: Icon(icon),
+            suffixIcon: suffixIcon,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: cardColor,
+            hintText: hint,
+            hintStyle: TextStyle(color: hintColor),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey[300]!),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF5B9BD5), width: 2),
             ),
           ),
         ),
