@@ -1,5 +1,6 @@
 # AskUp 📚
-
+srs:
+https://docs.google.com/document/d/1p6fkIg9jCMOiuKhdfGftiP_YNYa9kbJLvzdmZuiRncA/edit?usp=sharing
 AskUp is a lightweight classroom interaction tool built for lectures. It enables real-time engagement between lecturers and students through Q&A sessions, polls, and session management.
 
 ## ✨ Features
